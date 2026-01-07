@@ -24,25 +24,34 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleCapture = async (base64s: string[]) => {
+    if (base64s.length === 0) return;
     setLoading(true);
-    setLoadingStep("Mengenali bahan masakan...");
+    setLoadingStep("Mengenali bahan...");
     try {
       const detected = await analyzeFridgeImage(base64s);
+      
+      if (detected.length === 0 || detected.includes("__INVALID_IMAGE__")) {
+        alert("AI tidak menemukan bahan makanan. Pastikan foto jelas.");
+        setLoading(false);
+        return;
+      }
+
       setIngredients(detected);
       
-      setLoadingStep("Menyimpan ke stok digital...");
+      setLoadingStep("Memperbarui stok digital...");
       const estimated = await estimateInventory(detected);
       setInventory(prev => {
         const combined = [...prev, ...estimated];
         const seen = new Set();
         return combined.filter(item => {
-          const duplicate = seen.has(item.name.toLowerCase());
-          seen.add(item.name.toLowerCase());
-          return !duplicate;
+          const key = item.name.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         });
       });
       
-      setLoadingStep("Meracik resep lezat...");
+      setLoadingStep("Meracik resep koki bintang 5...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions.length > 0) {
@@ -51,10 +60,12 @@ const App: React.FC = () => {
           ...r, imageUrl: await generateRecipeImage(r.title)
         })));
         setRecipes(withImages);
+      } else {
+        alert("Tidak ada resep yang cocok.");
       }
     } catch (err) {
       console.error(err);
-      alert("Terjadi masalah saat memproses gambar.");
+      alert("Error memproses gambar.");
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -121,7 +132,7 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
       
-      <main className="flex-1 min-w-0 p-5 md:p-12 lg:p-16 pb-32 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-5 md:p-12 lg:p-16 pb-32 overflow-y-auto scrollbar-hide">
         {/* Top Header Mobile */}
         <div className="md:hidden flex items-center justify-between mb-8">
            <div className="flex items-center space-x-3">
@@ -139,11 +150,11 @@ const App: React.FC = () => {
           {activeTab === 'fridge' && (
             <div className="space-y-10">
               <header className="space-y-2">
-                <h1 className="text-2xl xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                <h1 className="text-[26px] xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                   My Culinary Assistant
                 </h1>
                 <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">
-                  Snap any food ingredients from your fridge or kitchen. AI will instantly recognize items and suggest gourmet recipes.
+                  Snap any ingredients from your kitchen. AI will instantly recognize items and suggest gourmet recipes.
                 </p>
               </header>
               <FridgeScanner 
@@ -177,7 +188,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Mobile White Capsule Navigation */}
-      <nav className="md:hidden fixed bottom-6 left-5 right-5 z-40 bg-white border border-slate-100 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
+      <nav className="md:hidden fixed bottom-6 left-5 right-5 z-40 bg-white/90 backdrop-blur-md border border-slate-100 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
         {navItems.map((item) => (
           <button
             key={item.id}
