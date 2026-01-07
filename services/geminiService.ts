@@ -22,15 +22,20 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-export const analyzeFridgeImage = async (base64Image: string): Promise<string[]> => {
+// Fix: Updated analyzeFridgeImage to accept an array of strings (base64Images) as called in App.tsx
+export const analyzeFridgeImage = async (base64Images: string[]): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
+    const parts = base64Images.map(data => ({
+      inlineData: { data, mimeType: 'image/jpeg' }
+    }));
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
         parts: [
-          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } }, 
-          { text: "Identifikasi semua bahan makanan yang terlihat di foto ini. Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
+          ...parts,
+          { text: "Identifikasi semua bahan makanan yang terlihat di foto-foto ini (ini adalah foto kulkas dari berbagai sudut). Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
         ] 
       }
     });
@@ -38,14 +43,17 @@ export const analyzeFridgeImage = async (base64Image: string): Promise<string[]>
     const text = responseText.toUpperCase();
     if (text.includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
     return responseText.toLowerCase().split(',').map(s => s.trim()).filter(s => s.length > 2);
-  } catch (e) { return []; }
+  } catch (e) { 
+    console.error("AI Analysis Error:", e);
+    return []; 
+  }
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `For these ingredients: ${ingredients.join(', ')}. 
   Estimate their typical shelf life in a fridge. 
-  Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and daysRemaining.`;
+  Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and days_remaining.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -60,17 +68,20 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
             properties: {
               name: { type: Type.STRING },
               category: { type: Type.STRING },
-              daysRemaining: { type: Type.NUMBER }
+              days_remaining: { type: Type.INTEGER }
             }
           }
         }
       }
     });
-    return JSON.parse(response.text || "[]").map((item: any) => ({
+    const result = JSON.parse(response.text || "[]");
+    return result.map((item: any) => ({
       id: Math.random().toString(36).substr(2, 9),
-      ...item,
+      name: item.name,
+      category: item.category,
+      daysRemaining: item.days_remaining,
       addedDate: new Date().toISOString(),
-      freshness: Math.min(100, (item.daysRemaining / 10) * 100)
+      freshness: Math.min(100, (item.days_remaining / 10) * 100)
     }));
   } catch (e) { return []; }
 };
@@ -110,13 +121,16 @@ export const generateMealPlan = async (inventory: InventoryItem[]): Promise<Meal
 export const generateRecipes = async (ingredients: string[], restriction: DietaryRestriction): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const systemPrompt = `Kamu adalah koki ahli. Buat 4 resep untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. 
-  INSTRUKSI HARUS SANGAT DETAIL (PECAH MENJADI BANYAK LANGKAH KECIL, MISAL 10+ LANGKAH):
-  1. Sertakan ukuran api (misal: api kecil, sedang, atau besar).
-  2. Gunakan takaran presisi dalam gram (gr) atau mililiter (ml).
-  3. Berikan durasi waktu memasak yang tepat dalam menit di SETIAP langkah.
-  4. Jelaskan urutan memasak bumbu secara spesifik (contoh: "Masukkan 5gr garam, lalu 2gr micin, baru 3gr gula").
-  Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
+  const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. 
+
+WAJIB: INSTRUKSI HARUS SANGAT DETAIL DAN TERPERINCI (Pecah menjadi minimal 10-15 langkah kecil):
+1. Setiap langkah WAJIB menyertakan ukuran api secara spesifik (misal: "Gunakan api kecil", "Gunakan api sedang cenderung besar").
+2. Setiap langkah WAJIB menyertakan takaran presisi dalam gram (gr) atau mililiter (ml) untuk bumbu dan bahan yang masuk.
+3. Setiap langkah WAJIB menyertakan durasi waktu yang sangat tepat dalam menit (misal: "Tumis selama 4 menit sampai bumbu mengeluarkan aroma harum").
+4. Untuk bumbu, jelaskan urutan yang sangat spesifik.
+5. Kalori harus dalam angka bulat (Integer).
+
+Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
 
   try {
     const response = await ai.models.generateContent({
@@ -133,30 +147,44 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
               title: { type: Type.STRING },
               description: { type: Type.STRING },
               difficulty: { type: Type.STRING, enum: ['Easy', 'Medium', 'Hard'] },
-              prepTime: { type: Type.STRING },
-              calories: { type: Type.NUMBER },
-              ingredientsID: { 
+              prep_time: { type: Type.STRING },
+              calories: { type: Type.INTEGER },
+              ingredients_id: { 
                 type: Type.ARRAY, 
                 items: { 
                   type: Type.OBJECT, 
                   properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
                 } 
               },
-              ingredientsEN: { 
+              ingredients_en: { 
                 type: Type.ARRAY, 
                 items: { 
                   type: Type.OBJECT, 
                   properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
                 } 
               },
-              instructionsID: { type: Type.ARRAY, items: { type: Type.STRING } },
-              instructionsEN: { type: Type.ARRAY, items: { type: Type.STRING } }
+              instructions_id: { type: Type.ARRAY, items: { type: Type.STRING } },
+              instructions_en: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           }
         }
       }
     });
-    return JSON.parse(response.text || "[]");
+    
+    const rawRecipes = JSON.parse(response.text || "[]");
+    return rawRecipes.map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      difficulty: r.difficulty,
+      prepTime: r.prep_time,
+      calories: Math.round(r.calories || 0),
+      ingredientsID: r.ingredients_id,
+      ingredientsEN: r.ingredients_en,
+      instructionsID: r.instructions_id,
+      instructionsEN: r.instructions_en,
+      imageUrl: "" 
+    }));
   } catch (e) { return []; }
 };
 
@@ -198,4 +226,4 @@ export const speakText = async (text: string) => {
     source.connect(ctx.destination);
     source.start();
   } catch (e) {}
-}
+};

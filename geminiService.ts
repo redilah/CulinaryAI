@@ -22,15 +22,19 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-export const analyzeFridgeImage = async (base64Image: string): Promise<string[]> => {
+export const analyzeFridgeImage = async (base64Images: string[]): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
+    const parts = base64Images.map(data => ({
+      inlineData: { data, mimeType: 'image/jpeg' }
+    }));
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
         parts: [
-          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } }, 
-          { text: "Identifikasi semua bahan makanan yang terlihat di foto ini. Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
+          ...parts,
+          { text: "Identifikasi semua bahan makanan yang terlihat di foto-foto ini (ini adalah foto kulkas dari berbagai sudut). Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
         ] 
       }
     });
@@ -38,7 +42,10 @@ export const analyzeFridgeImage = async (base64Image: string): Promise<string[]>
     const text = responseText.toUpperCase();
     if (text.includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
     return responseText.toLowerCase().split(',').map(s => s.trim()).filter(s => s.length > 2);
-  } catch (e) { return []; }
+  } catch (e) { 
+    console.error("AI Analysis Error:", e);
+    return []; 
+  }
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
@@ -60,7 +67,7 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
             properties: {
               name: { type: Type.STRING },
               category: { type: Type.STRING },
-              days_remaining: { type: Type.NUMBER }
+              days_remaining: { type: Type.INTEGER }
             }
           }
         }
@@ -119,8 +126,8 @@ WAJIB: INSTRUKSI HARUS SANGAT DETAIL DAN TERPERINCI (Pecah menjadi minimal 10-15
 1. Setiap langkah WAJIB menyertakan ukuran api secara spesifik (misal: "Gunakan api kecil", "Gunakan api sedang cenderung besar").
 2. Setiap langkah WAJIB menyertakan takaran presisi dalam gram (gr) atau mililiter (ml) untuk bumbu dan bahan yang masuk.
 3. Setiap langkah WAJIB menyertakan durasi waktu yang sangat tepat dalam menit (misal: "Tumis selama 4 menit sampai bumbu mengeluarkan aroma harum").
-4. Untuk bumbu, jelaskan urutan yang sangat spesifik (CONTOH: "Masukkan 6gr garam, aduk selama 20 detik, lalu masukkan 2gr micin, baru terakhir masukkan 4gr gula").
-5. Pecah instruksi menjadi langkah-langkah sangat kecil/atomik agar user tidak melewatkan detail sekecil apapun.
+4. Untuk bumbu, jelaskan urutan yang sangat spesifik.
+5. Kalori harus dalam angka bulat (Integer).
 
 Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
 
@@ -140,7 +147,7 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
               description: { type: Type.STRING },
               difficulty: { type: Type.STRING, enum: ['Easy', 'Medium', 'Hard'] },
               prep_time: { type: Type.STRING },
-              calories: { type: Type.NUMBER },
+              calories: { type: Type.INTEGER },
               ingredients_id: { 
                 type: Type.ARRAY, 
                 items: { 
@@ -170,12 +177,12 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
       description: r.description,
       difficulty: r.difficulty,
       prepTime: r.prep_time,
-      calories: r.calories,
+      calories: Math.round(r.calories || 0),
       ingredientsID: r.ingredients_id,
       ingredientsEN: r.ingredients_en,
       instructionsID: r.instructions_id,
       instructionsEN: r.instructions_en,
-      imageUrl: "" // Will be filled by image generator
+      imageUrl: "" 
     }));
   } catch (e) { return []; }
 };

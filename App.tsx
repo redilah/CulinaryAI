@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './geminiService';
+import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
 import Sidebar from './Sidebar';
 import FridgeScanner from './FridgeScanner';
@@ -22,11 +22,13 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const handleCapture = async (base64: string) => {
+  const handleCapture = async (base64s: string[]) => {
     setLoading(true);
-    const detected = await analyzeFridgeImage(base64);
+    const detected = await analyzeFridgeImage(base64s);
     if (detected.includes("__INVALID_IMAGE__")) {
-      alert("Gambar tidak terbaca sebagai isi kulkas. Coba lagi.");
+      alert("Gambar tidak terbaca sebagai isi kulkas. Coba gunakan foto yang lebih jelas.");
+    } else if (detected.length === 0) {
+      alert("Tidak ada bahan yang terdeteksi. Pastikan Anda mengunggah minimal 5 foto dari berbagai sudut.");
     } else {
       setIngredients(detected);
       const estimated = await estimateInventory(detected);
@@ -98,13 +100,12 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 min-w-0 p-4 md:p-12 lg:p-16 pb-32 md:pb-12 overflow-y-auto">
-        {/* Premium Mobile Header: Logo Left, Menu Right */}
         <div className="md:hidden flex items-center justify-between mb-6">
            <div className="flex items-center space-x-2">
              <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white text-xs shadow-lg shadow-emerald-100">
                <i className="fa-solid fa-leaf"></i>
              </div>
-             <span className="font-black text-slate-800 tracking-tighter text-xl">CulinaryAI</span>
+             <span className="font-black text-slate-800 tracking-tighter text-lg">CulinaryAI</span>
            </div>
            <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 bg-white rounded-xl shadow-sm border border-slate-100 active:scale-95 transition-transform">
              <i className="fa-solid fa-bars-staggered text-lg"></i>
@@ -114,11 +115,11 @@ const App: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           {activeTab === 'fridge' && (
             <div className="space-y-8 md:space-y-12">
-              <header className="space-y-2">
+              <header className="space-y-1">
                 <h1 className="text-xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
                   My Culinary Assistant
                 </h1>
-                <p className="text-slate-500 text-sm md:text-xl font-medium max-w-2xl">Analyze your fridge and cook smarter with AI.</p>
+                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload at least 5 angle photos of your fridge for AI analysis.</p>
               </header>
               <FridgeScanner onCapture={handleCapture} loading={loading} detectedIngredients={ingredients} dietary={dietary} />
               <RecipeList recipes={recipes} onSelect={setSelectedRecipe} loading={loading} />
@@ -153,7 +154,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Premium Mobile Bottom Navigation Bar */}
       <nav className="md:hidden fixed bottom-6 left-6 right-6 z-40 bg-white/90 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
         {navItems.map((item) => (
           <button

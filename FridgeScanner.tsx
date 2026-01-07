@@ -1,9 +1,9 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { DietaryRestriction } from './types';
 
 interface FridgeScannerProps {
-  onCapture: (base64: string) => void;
+  onCapture: (base64s: string[]) => void;
   detectedIngredients: string[];
   loading: boolean;
   dietary: DietaryRestriction;
@@ -11,16 +11,32 @@ interface FridgeScannerProps {
 
 const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngredients, loading, dietary }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedCount, setSelectedCount] = useState(0);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        onCapture(base64);
-      };
-      reader.readAsDataURL(file);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Fix: Explicitly cast e.target.files to FileList to ensure proper type inference for Array.from
+    const fileList = e.target.files as FileList;
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    
+    setSelectedCount(files.length);
+
+    try {
+      // Fix: Explicitly type 'file' as 'File' (which inherits from 'Blob') to satisfy readAsDataURL parameter requirements
+      const base64Promises = files.map((file: File) => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const base64s = await Promise.all(base64Promises);
+      onCapture(base64s);
+    } catch (err) {
+      console.error("Error reading files:", err);
+      alert("Gagal membaca file. Pastikan ukuran foto tidak terlalu besar.");
     }
   };
 
@@ -31,25 +47,32 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
         {/* Left Side: Capture Action */}
         <div 
           onClick={() => !loading && fileInputRef.current?.click()}
-          className={`relative w-full lg:w-[30%] min-h-[140px] lg:min-h-[180px] bg-slate-50 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center cursor-pointer transition-all shrink-0 ${
+          className={`relative w-full lg:w-[35%] min-h-[160px] lg:min-h-[200px] bg-slate-50 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center cursor-pointer transition-all shrink-0 ${
             loading ? 'opacity-50 cursor-wait' : 'hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-xl border-slate-200 group'
           }`}
         >
           {loading ? (
             <div className="flex flex-col items-center">
               <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-              <p className="mt-3 text-emerald-600 font-black text-[9px] uppercase tracking-[0.2em]">Processing...</p>
+              <p className="mt-3 text-emerald-600 font-black text-[9px] uppercase tracking-[0.2em]">Analysing {selectedCount} Photos...</p>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-4 text-center">
               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md mb-3 group-hover:scale-110 transition-transform duration-300">
-                <i className="fa-solid fa-camera text-2xl text-emerald-500"></i>
+                <i className="fa-solid fa-images text-2xl text-emerald-500"></i>
               </div>
-              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Snap / Upload</p>
+              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Upload Multiple (Min. 5)</p>
+              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Select all angles for better result</p>
             </div>
           )}
-          {/* REMOVED capture attribute to allow gallery selection */}
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept="image/*" 
+            multiple 
+            className="hidden" 
+          />
         </div>
 
         {/* Right Side: Ingredients Display */}
@@ -86,7 +109,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
             ) : (
               <div className="flex flex-col w-full opacity-60">
                  <p className="text-slate-500 italic text-xs font-semibold tracking-tight">
-                    Pantry empty. Snap a photo.
+                    Pantry empty. Snap at least 5 photos.
                  </p>
               </div>
             )}
