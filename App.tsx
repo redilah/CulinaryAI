@@ -26,9 +26,9 @@ const App: React.FC = () => {
     setLoading(true);
     const detected = await analyzeFridgeImage(base64s);
     if (detected.includes("__INVALID_IMAGE__")) {
-      alert("Gambar tidak terbaca sebagai isi kulkas. Coba gunakan foto yang lebih jelas.");
+      alert("Gambar tidak terbaca sebagai isi kulkas atau bahan makanan. Coba gunakan foto yang lebih jelas.");
     } else if (detected.length === 0) {
-      alert("Tidak ada bahan yang terdeteksi. Pastikan Anda mengunggah minimal 5 foto dari berbagai sudut.");
+      alert("Tidak ada bahan yang terdeteksi. Gunakan maksimal 5 foto dari berbagai sudut.");
     } else {
       setIngredients(detected);
       const estimated = await estimateInventory(detected);
@@ -119,7 +119,7 @@ const App: React.FC = () => {
                 <h1 className="text-xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
                   My Culinary Assistant
                 </h1>
-                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload at least 5 angle photos of your fridge for AI analysis.</p>
+                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your fridge/ingredients for smart AI analysis.</p>
               </header>
               <FridgeScanner onCapture={handleCapture} loading={loading} detectedIngredients={ingredients} dietary={dietary} />
               <RecipeList recipes={recipes} onSelect={setSelectedRecipe} loading={loading} />

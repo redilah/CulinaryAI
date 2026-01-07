@@ -16,7 +16,7 @@ const RecipeList: React.FC<RecipeListProps> = ({ recipes, onSelect, loading }) =
     <div className="space-y-8 animate-in fade-in duration-700 mt-12">
       <header className="flex items-center justify-between border-b border-slate-100 pb-4">
         <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Suggested Recipes</h2>
-        <span className="text-xs md:text-sm font-bold text-emerald-600">Matched to your fridge</span>
+        <span className="text-xs md:text-sm font-bold text-emerald-600">Matched to your pantry</span>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

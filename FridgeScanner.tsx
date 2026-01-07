@@ -14,20 +14,27 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
   const [selectedCount, setSelectedCount] = useState(0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Fix: Explicitly cast e.target.files to FileList to ensure proper type inference for Array.from
     const fileList = e.target.files as FileList;
-    const files = Array.from(fileList || []);
+    let files = Array.from(fileList || []);
     if (files.length === 0) return;
+    
+    // Limit to maximum 5 photos as requested
+    if (files.length > 5) {
+      alert("Maksimal 5 foto saja ya agar proses tetap cepat dan akurat.");
+      files = files.slice(0, 5);
+    }
     
     setSelectedCount(files.length);
 
     try {
-      // Fix: Explicitly type 'file' as 'File' (which inherits from 'Blob') to satisfy readAsDataURL parameter requirements
       const base64Promises = files.map((file: File) => {
         return new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = reject;
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = () => reject(new Error("Gagal membaca file"));
           reader.readAsDataURL(file);
         });
       });
@@ -36,7 +43,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
       onCapture(base64s);
     } catch (err) {
       console.error("Error reading files:", err);
-      alert("Gagal membaca file. Pastikan ukuran foto tidak terlalu besar.");
+      alert("Gagal memproses gambar. Coba pilih foto dengan ukuran lebih kecil.");
     }
   };
 
@@ -59,10 +66,10 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
           ) : (
             <div className="flex flex-col items-center justify-center p-4 text-center">
               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md mb-3 group-hover:scale-110 transition-transform duration-300">
-                <i className="fa-solid fa-images text-2xl text-emerald-500"></i>
+                <i className="fa-solid fa-camera-retro text-2xl text-emerald-500"></i>
               </div>
-              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Upload Multiple (Min. 5)</p>
-              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Select all angles for better result</p>
+              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Snap Fridge Photos</p>
+              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Maximum 5 photos per analysis</p>
             </div>
           )}
           <input 
@@ -82,7 +89,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
               <div className="relative shrink-0">
                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
               </div>
-              <h2 className="text-sm md:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">My Ingredients</h2>
+              <h2 className="text-sm md:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">Inventory Detected</h2>
             </div>
             
             {dietary !== DietaryRestriction.None && (
@@ -109,7 +116,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
             ) : (
               <div className="flex flex-col w-full opacity-60">
                  <p className="text-slate-500 italic text-xs font-semibold tracking-tight">
-                    Pantry empty. Snap at least 5 photos.
+                    No ingredients found. Upload up to 5 photos.
                  </p>
               </div>
             )}
