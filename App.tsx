@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './geminiService';
+import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
 import Sidebar from './Sidebar';
 import FridgeScanner from './FridgeScanner';
@@ -23,12 +23,12 @@ const App: React.FC = () => {
   const [loadingStep, setLoadingStep] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const handleCapture = async (base64s: string[]) => {
-    if (base64s.length === 0) return;
+  const handleCapture = async (base64: string) => {
+    if (!base64) return;
     setLoading(true);
     setLoadingStep("Meneliti bahan di foto...");
     try {
-      const detected = await analyzeFridgeImage(base64s);
+      const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
       setLoadingStep("Mendata stok digital...");

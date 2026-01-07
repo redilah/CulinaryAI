@@ -22,19 +22,18 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-export const analyzeFridgeImage = async (base64Images: string[]): Promise<string[]> => {
+export const analyzeFridgeImage = async (base64: string): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const parts = base64Images.map(data => ({
-      inlineData: { data, mimeType: 'image/jpeg' }
-    }));
+    // Ensure base64 is clean (no data:image/jpeg;base64, prefix)
+    const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
         parts: [
-          ...parts,
-          { text: "PERAN: Detektif Bahan Makanan Ahli & Koki Bintang 5. TUGAS MUTLAK: Identifikasi bahan di foto ini. APAPUN KONDISI GAMBARNYA (Gelap, Buram, Noise), Anda HARUS memberikan daftar bahan. Gunakan insting koki Anda untuk menebak objek secara agresif (Contoh: botol merah kemungkinan saus, gundukan putih kemungkinan nasi/tepung). JANGAN PERNAH MENJAWAB GAMBAR TIDAK JELAS. Jika benar-benar tidak terlihat, balas dengan daftar bahan dasar dapur: Telur, Bawang Merah, Bawang Putih, Cabai, Minyak Goreng, Garam. Balas hanya dengan nama bahan dipisahkan koma dalam Bahasa Indonesia." }
+          { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
+          { text: "PERAN: Detektif Bahan Makanan Ahli. TUGAS: Identifikasi bahan di foto ini. APAPUN KONDISI GAMBARNYA, Anda HARUS menebak bahan (botol merah = saus, kotak putih = tahu). JANGAN PERNAH MENOLAK ANALISA. Jika gelap/kosong, berikan daftar: Telur, Bawang Merah, Bawang Putih, Cabai, Minyak Goreng. Balas hanya dengan nama bahan dipisahkan koma dalam Bahasa Indonesia." }
         ] 
       }
     });
@@ -43,11 +42,11 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
     const detected = responseText
       .split(/[,\n]/)
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
-      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("berikut adalah"));
+      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("gambar"));
       
     return detected.length > 0 ? detected : ["telur", "bawang merah", "bawang putih", "cabai", "minyak goreng"];
   } catch (e) { 
-    console.error("Analysis failed, using fallback ingredients.");
+    console.error("Analysis failed:", e);
     return ["telur", "bawang merah", "bawang putih", "minyak goreng", "cabai"]; 
   }
 };
@@ -57,13 +56,12 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
   
   const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. 
 
-WAJIB DAN MUTLAK: INSTRUKSI HARUS SANGAT ATOMIK DAN DETAIL (10-15 langkah kecil per resep):
-1. UKURAN API: Wajib sebutkan di setiap langkah proses masak (Contoh: "Gunakan api lilin", "Gunakan api sedang-kecil", "Gunakan api besar").
-2. TAKARAN PRESISI: Wajib sebutkan berat dalam gram (gr) atau mililiter (ml) untuk setiap bumbu yang masuk.
-3. TIMER AKURAT: Wajib sebutkan durasi dalam menit atau detik (Contoh: "Tumis bumbu selama 3 menit 20 detik").
-4. URUTAN BUMBU: Masukkan bumbu satu per satu, jangan digabung (Contoh: "Masukkan 5gr garam, aduk 10 detik, lalu masukkan 2gr gula").
-5. JUMLAH LANGKAH: Wajib antara 10 sampai 15 langkah. Jangan disingkat!
-6. KALORI: Wajib angka bulat (Integer), misal: 420 kcal.
+WAJIB: INSTRUKSI SANGAT DETAIL (10-15 langkah kecil per resep):
+1. UKURAN API: Sebutkan di setiap langkah (api lilin, sedang, besar).
+2. TAKARAN: Gunakan gram (gr) atau mililiter (ml).
+3. TIMER: Sebutkan menit/detik yang akurat.
+4. URUTAN: Masukkan bumbu satu per satu.
+5. KALORI: Angka bulat (Integer).
 
 Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
 
@@ -109,7 +107,7 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
       imageUrl: "" 
     }));
   } catch (e) { 
-    console.error("Recipe generation failed.");
+    console.error("Recipe generation failed:", e);
     return []; 
   }
 };
@@ -119,10 +117,11 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style plating, 8k resolution, macro shot.` }] }
+      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style, 8k resolution.` }] }
     });
-    const parts = response.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+    }
   } catch (e) {}
   return `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800`;
 };
@@ -146,7 +145,9 @@ export const speakText = async (text: string) => {
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start();
-  } catch (e) {}
+  } catch (e) {
+    console.error("TTS failed:", e);
+  }
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
