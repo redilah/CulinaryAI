@@ -1,5 +1,6 @@
+
 {
-  "name": "culinary-ai-smart-fridge",
+  "name": "culinary_ai_smart_fridge",
   "private": true,
   "version": "1.0.0",
   "type": "module",

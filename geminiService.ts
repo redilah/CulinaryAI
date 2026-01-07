@@ -45,7 +45,7 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `For these ingredients: ${ingredients.join(', ')}. 
   Estimate their typical shelf life in a fridge. 
-  Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and daysRemaining.`;
+  Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and days_remaining.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -60,17 +60,20 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
             properties: {
               name: { type: Type.STRING },
               category: { type: Type.STRING },
-              daysRemaining: { type: Type.NUMBER }
+              days_remaining: { type: Type.NUMBER }
             }
           }
         }
       }
     });
-    return JSON.parse(response.text || "[]").map((item: any) => ({
+    const result = JSON.parse(response.text || "[]");
+    return result.map((item: any) => ({
       id: Math.random().toString(36).substr(2, 9),
-      ...item,
+      name: item.name,
+      category: item.category,
+      daysRemaining: item.days_remaining,
       addedDate: new Date().toISOString(),
-      freshness: Math.min(100, (item.daysRemaining / 10) * 100)
+      freshness: Math.min(100, (item.days_remaining / 10) * 100)
     }));
   } catch (e) { return []; }
 };
@@ -136,30 +139,44 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
               title: { type: Type.STRING },
               description: { type: Type.STRING },
               difficulty: { type: Type.STRING, enum: ['Easy', 'Medium', 'Hard'] },
-              prepTime: { type: Type.STRING },
+              prep_time: { type: Type.STRING },
               calories: { type: Type.NUMBER },
-              ingredientsID: { 
+              ingredients_id: { 
                 type: Type.ARRAY, 
                 items: { 
                   type: Type.OBJECT, 
                   properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
                 } 
               },
-              ingredientsEN: { 
+              ingredients_en: { 
                 type: Type.ARRAY, 
                 items: { 
                   type: Type.OBJECT, 
                   properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
                 } 
               },
-              instructionsID: { type: Type.ARRAY, items: { type: Type.STRING } },
-              instructionsEN: { type: Type.ARRAY, items: { type: Type.STRING } }
+              instructions_id: { type: Type.ARRAY, items: { type: Type.STRING } },
+              instructions_en: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           }
         }
       }
     });
-    return JSON.parse(response.text || "[]");
+    
+    const rawRecipes = JSON.parse(response.text || "[]");
+    return rawRecipes.map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      difficulty: r.difficulty,
+      prepTime: r.prep_time,
+      calories: r.calories,
+      ingredientsID: r.ingredients_id,
+      ingredientsEN: r.ingredients_en,
+      instructionsID: r.instructions_id,
+      instructionsEN: r.instructions_en,
+      imageUrl: "" // Will be filled by image generator
+    }));
   } catch (e) { return []; }
 };
 
