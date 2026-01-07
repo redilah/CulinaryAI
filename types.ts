@@ -7,18 +7,10 @@ export interface Ingredient {
 export interface InventoryItem {
   id: string;
   name: string;
-  category: 'Produce' | 'Dairy' | 'Meat' | 'Pantry' | 'Others';
+  category: string;
   addedDate: string;
   daysRemaining: number;
-  freshness: number; // 0 to 100
-}
-
-export interface MealPlanDay {
-  day: string;
-  breakfast: string;
-  lunch: string;
-  dinner: string;
-  reason: string; // e.g., "Menggunakan bayam yang hampir layu"
+  freshness: number;
 }
 
 export interface Recipe {
@@ -40,15 +32,31 @@ export interface ShoppingItem {
   checked: boolean;
 }
 
+/**
+ * Fixed: Added missing MealPlanDay interface used in services/geminiService.ts 
+ * and components/MealPlanner.tsx to resolve import errors.
+ */
+export interface MealPlanDay {
+  day: string;
+  breakfast: string;
+  lunch: string;
+  dinner: string;
+  reason: string;
+}
+
 export enum DietaryRestriction {
   Vegetarian = 'Vegetarian',
   Vegan = 'Vegan',
   Keto = 'Keto',
   GlutenFree = 'Gluten-Free',
   Paleo = 'Paleo',
+  None = 'None',
+  /**
+   * Fixed: Added missing members to DietaryRestriction enum 
+   * to resolve property access errors in components/Sidebar.tsx.
+   */
   HighProtein = 'High Protein',
   MassGainer = 'Mass Gainer',
   LeanBulk = 'Lean Bulk',
-  PowerMeal = 'Power Meal',
-  None = 'None'
+  PowerMeal = 'Power Meal'
 }
