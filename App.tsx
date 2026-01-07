@@ -27,39 +27,58 @@ const App: React.FC = () => {
     if (!base64) return;
     setLoading(true);
     setLoadingStep("Meneliti bahan di foto...");
+    
     try {
+      // 1. Deteksi Bahan (Wajib)
       const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
-      setLoadingStep("Mendata stok digital...");
-      const estimated = await estimateInventory(detected);
-      setInventory(prev => {
-        const combined = [...prev, ...estimated];
-        const seen = new Set();
-        return combined.filter(item => {
-          const key = item.name.toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-      });
-      
+      if (detected.length === 0) {
+        setLoading(false);
+        alert("Tidak ada bahan yang terdeteksi jelas. Coba foto lebih dekat atau dengan cahaya yang lebih baik.");
+        return;
+      }
+
+      // 2. Generate Resep (Prioritas Utama UI)
       setLoadingStep("Koki meracik resep terbaik...");
       const suggestions = await generateRecipes(detected, dietary);
       
-      if (suggestions.length > 0) {
-        setLoadingStep("Mengambil foto masakan...");
-        const withImages = await Promise.all(suggestions.map(async r => ({
-          ...r, imageUrl: await generateRecipeImage(r.title)
-        })));
-        setRecipes(withImages);
+      if (suggestions && suggestions.length > 0) {
+        // Tampilkan resep segera tanpa menunggu gambar atau inventori
+        setRecipes(suggestions);
+        setLoading(false); // Matikan loading di sini agar resep langsung bisa dilihat
+        setLoadingStep("");
+
+        // 3. Proses Background: Ambil Gambar (Non-Blocking)
+        suggestions.forEach(async (r, idx) => {
+          try {
+            const img = await generateRecipeImage(r.title);
+            setRecipes(prev => prev.map((rec, i) => i === idx ? { ...rec, imageUrl: img } : rec));
+          } catch (e) {
+            console.error("Gagal memuat gambar resep:", r.title);
+          }
+        });
+
+        // 4. Proses Background: Update Inventori (Non-Blocking)
+        estimateInventory(detected).then(estimated => {
+          setInventory(prev => {
+            const combined = [...prev, ...estimated];
+            const seen = new Set();
+            return combined.filter(item => {
+              const key = item.name.toLowerCase();
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+          });
+        }).catch(e => console.error("Inventory background error diabaikan"));
+      } else {
+        setLoading(false);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Critical Capture Error:", err);
       alert("Maaf, terjadi masalah koneksi. Silakan coba lagi.");
-    } finally {
       setLoading(false);
-      setLoadingStep("");
     }
   };
 
@@ -68,12 +87,18 @@ const App: React.FC = () => {
     if (ingredients.length > 0) {
       setLoading(true);
       setLoadingStep(`Menyesuaikan resep ${d}...`);
-      const suggestions = await generateRecipes(ingredients, d);
-      const withImages = await Promise.all(suggestions.map(async r => ({
-        ...r, imageUrl: await generateRecipeImage(r.title)
-      })));
-      setRecipes(withImages);
-      setLoading(false);
+      try {
+        const suggestions = await generateRecipes(ingredients, d);
+        setRecipes(suggestions);
+        setLoading(false);
+        
+        suggestions.forEach(async (r, idx) => {
+          const img = await generateRecipeImage(r.title);
+          setRecipes(prev => prev.map((rec, i) => i === idx ? { ...rec, imageUrl: img } : rec));
+        });
+      } catch (e) {
+        setLoading(false);
+      }
       setLoadingStep("");
     }
   };
@@ -81,11 +106,16 @@ const App: React.FC = () => {
   const handleGeneratePlan = async () => {
     setLoading(true);
     setLoadingStep("Menyusun jadwal makan...");
-    setActiveTab('planner');
-    const plan = await generateMealPlan(inventory);
-    setMealPlan(plan);
-    setLoading(false);
-    setLoadingStep("");
+    try {
+      setActiveTab('planner');
+      const plan = await generateMealPlan(inventory);
+      setMealPlan(plan);
+    } catch (e) {
+      alert("Gagal menyusun jadwal makan.");
+    } finally {
+      setLoading(false);
+      setLoadingStep("");
+    }
   };
 
   const addToShoppingList = (name: string) => {
@@ -140,7 +170,7 @@ const App: React.FC = () => {
           {activeTab === 'fridge' && (
             <div className="space-y-10">
               <header className="space-y-2">
-                <h1 className="text-[26px] xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                <h1 className="text-[26px] xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
                   My Culinary Assistant
                 </h1>
                 <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">

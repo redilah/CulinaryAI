@@ -25,7 +25,6 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
 export const analyzeFridgeImage = async (base64: string): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    // Ensure base64 is clean (no data:image/jpeg;base64, prefix)
     const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
     
     const response = await ai.models.generateContent({
@@ -33,7 +32,7 @@ export const analyzeFridgeImage = async (base64: string): Promise<string[]> => {
       contents: { 
         parts: [
           { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
-          { text: "PERAN: Detektif Bahan Makanan Ahli. TUGAS: Identifikasi bahan di foto ini. APAPUN KONDISI GAMBARNYA, Anda HARUS menebak bahan (botol merah = saus, kotak putih = tahu). JANGAN PERNAH MENOLAK ANALISA. Jika gelap/kosong, berikan daftar: Telur, Bawang Merah, Bawang Putih, Cabai, Minyak Goreng. Balas hanya dengan nama bahan dipisahkan koma dalam Bahasa Indonesia." }
+          { text: "TUGAS: Identifikasi bahan makanan yang terlihat secara nyata di foto ini. SYARAT MUTLAK: JANGAN menebak-nebak. Hanya sebutkan bahan yang benar-benar teridentifikasi jelas melalui bentuk, label, atau warna yang eksplisit. Jika Anda tidak yakin 100% tentang suatu objek, JANGAN sebutkan. Jangan berasumsi tentang isi dalam wadah tertutup yang tidak tembus pandang. Jika gambar terlalu buram atau tidak menunjukkan bahan makanan, kembalikan daftar kosong. Balas hanya dengan daftar nama bahan saja dipisahkan dengan koma dalam Bahasa Indonesia tanpa kata pengantar atau penjelasan tambahan." }
         ] 
       }
     });
@@ -44,10 +43,10 @@ export const analyzeFridgeImage = async (base64: string): Promise<string[]> => {
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
       .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("gambar"));
       
-    return detected.length > 0 ? detected : ["telur", "bawang merah", "bawang putih", "cabai", "minyak goreng"];
+    return detected;
   } catch (e) { 
-    console.error("Analysis failed:", e);
-    return ["telur", "bawang merah", "bawang putih", "minyak goreng", "cabai"]; 
+    console.error("Analysis service failed:", e);
+    return []; 
   }
 };
 
@@ -107,7 +106,7 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
       imageUrl: "" 
     }));
   } catch (e) { 
-    console.error("Recipe generation failed:", e);
+    console.error("Recipe service failed:", e);
     return []; 
   }
 };
@@ -117,7 +116,7 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style, 8k resolution.` }] }
+      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style plating, macro shot, 8k resolution.` }] }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
@@ -145,9 +144,7 @@ export const speakText = async (text: string) => {
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start();
-  } catch (e) {
-    console.error("TTS failed:", e);
-  }
+  } catch (e) {}
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {

@@ -61,7 +61,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
                 <i className="fa-solid fa-camera-retro text-3xl text-emerald-500"></i>
               </div>
               <p className="text-slate-900 font-black uppercase text-xs tracking-widest">Pindai Bahan Dapur</p>
-              <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-widest">Ketuk untuk mengambil foto</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-widest">Ketuk untuk upload foto</p>
             </div>
           )}
           <input 
@@ -75,7 +75,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
 
         <div className="flex-1 bg-slate-50/60 rounded-[2rem] p-6 md:p-10 border border-slate-100 flex flex-col min-h-[220px]">
           <header className="flex items-center justify-between mb-6">
-            <h2 className="text-lg md:text-2xl font-black text-slate-900 tracking-tighter">Bahan Ditemukan</h2>
+            <h2 className="text-lg md:text-2xl font-black text-slate-900 tracking-tighter">Detected Ingredients</h2>
             {dietary !== DietaryRestriction.None && (
               <span className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">
                 {dietary}
