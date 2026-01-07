@@ -1,0 +1,8 @@
+{
+  "name": "Culinary AI: Smart Fridge Assistant",
+  "description": "A high-end cooking companion that analyzes your fridge via photo, suggests tailored recipes, and provides a voice-activated hands-free cooking experience.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
