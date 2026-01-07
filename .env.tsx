@@ -1,1 +1,3 @@
-VITE_GEMINI_API_KEY=AIzaSyDx3VskNhcY7_FdqNlQJSNvkOqrX7h-M9E
+// This file is erroneously named .env.tsx and is not used for environment variables.
+// Environment variables are managed by the build system and accessed via process.env.API_KEY.
+export {};

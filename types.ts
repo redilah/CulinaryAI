@@ -21,6 +21,8 @@ export interface Recipe {
   prepTime: string;
   calories: number;
   ingredients: Ingredient[];
+  ingredientsID: Ingredient[];
+  ingredientsEN: Ingredient[];
   instructionsID: string[];
   instructionsEN: string[];
   imageUrl: string;
@@ -32,10 +34,6 @@ export interface ShoppingItem {
   checked: boolean;
 }
 
-/**
- * Fixed: Added missing MealPlanDay interface used in services/geminiService.ts 
- * and components/MealPlanner.tsx to resolve import errors.
- */
 export interface MealPlanDay {
   day: string;
   breakfast: string;
@@ -51,10 +49,6 @@ export enum DietaryRestriction {
   GlutenFree = 'Gluten-Free',
   Paleo = 'Paleo',
   None = 'None',
-  /**
-   * Fixed: Added missing members to DietaryRestriction enum 
-   * to resolve property access errors in components/Sidebar.tsx.
-   */
   HighProtein = 'High Protein',
   MassGainer = 'Mass Gainer',
   LeanBulk = 'Lean Bulk',

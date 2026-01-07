@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
 
 function encode(bytes: Uint8Array) {
@@ -57,8 +56,9 @@ export class LiveAssistant {
   async start(currentStep: string) {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    this.inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-    this.outputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+    this.inputAudioCtx = new AudioContextClass({ sampleRate: 16000 });
+    this.outputAudioCtx = new AudioContextClass({ sampleRate: 24000 });
     
     if (this.inputAudioCtx.state === 'suspended') await this.inputAudioCtx.resume();
     if (this.outputAudioCtx.state === 'suspended') await this.outputAudioCtx.resume();
@@ -86,7 +86,7 @@ export class LiveAssistant {
     - Bahan: ${this.ingredients}.
     - Langkah saat ini: ${currentStep}.`;
 
-    this.sessionPromise = ai.live.connect({
+    const sessionPromise = ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       config: {
         responseModalities: [Modality.AUDIO],
@@ -100,11 +100,10 @@ export class LiveAssistant {
           const source = this.inputAudioCtx!.createMediaStreamSource(this.audioStream!);
           const scriptProcessor = this.inputAudioCtx!.createScriptProcessor(4096, 1, 1);
           scriptProcessor.onaudioprocess = (e) => {
-            if (this.sessionPromise) {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = this.createBlob(inputData);
-              this.sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
-            }
+            const inputData = e.inputBuffer.getChannelData(0);
+            const pcmBlob = this.createBlob(inputData);
+            // CRITICAL: Solely rely on sessionPromise resolves to send real-time input
+            sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
           };
           source.connect(scriptProcessor);
           scriptProcessor.connect(this.inputAudioCtx!.destination);
@@ -136,6 +135,8 @@ export class LiveAssistant {
         onclose: () => this.stop()
       }
     });
+
+    this.sessionPromise = sessionPromise;
   }
 
   sendFrame(base64Data: string) {
