@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
+import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
 import Sidebar from './Sidebar';
 import FridgeScanner from './FridgeScanner';
@@ -26,17 +26,13 @@ const App: React.FC = () => {
     setLoading(true);
     try {
       const detected = await analyzeFridgeImage(base64s);
-      
-      if (detected.includes("__INVALID_IMAGE__")) {
-        alert("Gambar tidak terdeteksi sebagai makanan. Coba ambil foto bahan masakan atau kulkas Anda dengan lebih jelas.");
-      } else if (detected.length === 0) {
-        alert("AI tidak menemukan bahan apapun. Pastikan foto cukup terang dan fokus pada objek makanan.");
+      if (detected.length === 0) {
+        alert("Bahan tidak ditemukan. Coba gunakan foto yang lebih dekat atau pencahayaan yang lebih baik.");
       } else {
         setIngredients(detected);
         const estimated = await estimateInventory(detected);
         setInventory(prev => {
           const combined = [...prev, ...estimated];
-          // Filter out duplicates by name
           return combined.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
         });
         
@@ -47,7 +43,7 @@ const App: React.FC = () => {
         setRecipes(withImages);
       }
     } catch (err) {
-      alert("Terjadi kesalahan saat menganalisis foto. Silakan coba lagi.");
+      alert("Terjadi masalah saat memproses gambar.");
     } finally {
       setLoading(false);
     }
@@ -112,12 +108,12 @@ const App: React.FC = () => {
       <main className="flex-1 min-w-0 p-4 md:p-12 lg:p-16 pb-32 md:pb-12 overflow-y-auto">
         <div className="md:hidden flex items-center justify-between mb-6">
            <div className="flex items-center space-x-2">
-             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white text-xs shadow-lg shadow-emerald-100">
+             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white text-xs">
                <i className="fa-solid fa-leaf"></i>
              </div>
              <span className="font-black text-slate-800 tracking-tighter text-lg">CulinaryAI</span>
            </div>
-           <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 bg-white rounded-xl shadow-sm border border-slate-100 active:scale-95 transition-transform">
+           <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 bg-white rounded-xl shadow-sm border border-slate-100">
              <i className="fa-solid fa-bars-staggered text-lg"></i>
            </button>
         </div>
@@ -137,20 +133,11 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'inventory' && (
-            <InventoryDashboard 
-              inventory={inventory} 
-              setInventory={setInventory} 
-              onGeneratePlan={handleGeneratePlan} 
-              loading={loading} 
-            />
+            <InventoryDashboard inventory={inventory} setInventory={setInventory} onGeneratePlan={handleGeneratePlan} loading={loading} />
           )}
 
           {activeTab === 'planner' && (
-            <MealPlanner 
-              plan={mealPlan} 
-              onRefresh={handleGeneratePlan} 
-              loading={loading} 
-            />
+            <MealPlanner plan={mealPlan} onRefresh={handleGeneratePlan} loading={loading} />
           )}
 
           {activeTab === 'shopping' && (
@@ -164,16 +151,12 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-40 bg-white/90 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-40 bg-white/90 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-lg p-1.5 flex items-center justify-between">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id as any)}
-            className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-[1.2rem] transition-all duration-300 ${
-              activeTab === item.id 
-                ? 'text-emerald-600 font-black bg-emerald-50/50' 
-                : 'text-slate-400 font-medium'
-            }`}
+            className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'text-emerald-600 font-black bg-emerald-50/50' : 'text-slate-400 font-medium'}`}
           >
             <i className={`fa-solid ${item.icon} text-base mb-0.5`}></i>
             <span className="text-[9px] uppercase tracking-wider">{item.label}</span>

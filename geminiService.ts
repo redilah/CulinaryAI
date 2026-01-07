@@ -34,14 +34,17 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
       contents: { 
         parts: [
           ...parts,
-          { text: "Identifikasi semua bahan makanan yang terlihat di foto-foto ini (ini adalah foto kulkas dari berbagai sudut). Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
+          { text: "PENTING: Identifikasi semua bahan makanan di foto ini. Sekalipun foto BURAM (BLURRY), PECAH (PIXELATED), atau GELAP, kamu WAJIB menebak apa bahan tersebut berdasarkan bentuk dan warnanya. Contoh: Jika ada bentuk coklat tidak jelas, tebak sebagai 'ayam goreng' atau 'daging'. Jangan pernah bilang tidak tahu. Berikan daftar nama bahan saja dipisahkan dengan koma. Gunakan Bahasa Indonesia." }
         ] 
       }
     });
     const responseText = response.text || "";
-    const text = responseText.toUpperCase();
-    if (text.includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
-    return responseText.toLowerCase().split(',').map(s => s.trim()).filter(s => s.length > 2);
+    if (responseText.toUpperCase().includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
+    
+    return responseText
+      .split(/[,\n]/)
+      .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
+      .filter(s => s.length > 1);
   } catch (e) { 
     console.error("AI Analysis Error:", e);
     return []; 
@@ -50,10 +53,7 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `For these ingredients: ${ingredients.join(', ')}. 
-  Estimate their typical shelf life in a fridge. 
-  Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and days_remaining.`;
-
+  const prompt = `For these ingredients: ${ingredients.join(', ')}. Estimate their shelf life. Return JSON array of objects with name, category, and days_remaining.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -87,11 +87,7 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
 
 export const generateMealPlan = async (inventory: InventoryItem[]): Promise<MealPlanDay[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const expiringSoon = [...inventory].sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 5).map(i => i.name);
-  
-  const prompt = `Create a 3-day meal plan using these expiring items: ${expiringSoon.join(', ')}. 
-  For each day provide breakfast, lunch, dinner and the reason why this menu is chosen (mention the ingredient being saved). Indonesian Language.`;
-
+  const prompt = `Create a 3-day meal plan using: ${inventory.map(i => i.name).join(', ')}. Return JSON array of objects with day, breakfast, lunch, dinner, reason. Indonesian.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -119,18 +115,7 @@ export const generateMealPlan = async (inventory: InventoryItem[]): Promise<Meal
 
 export const generateRecipes = async (ingredients: string[], restriction: DietaryRestriction): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. 
-
-WAJIB: INSTRUKSI HARUS SANGAT DETAIL DAN TERPERINCI (Pecah menjadi minimal 10-15 langkah kecil):
-1. Setiap langkah WAJIB menyertakan ukuran api secara spesifik (misal: "Gunakan api kecil", "Gunakan api sedang cenderung besar").
-2. Setiap langkah WAJIB menyertakan takaran presisi dalam gram (gr) atau mililiter (ml) untuk bumbu dan bahan yang masuk.
-3. Setiap langkah WAJIB menyertakan durasi waktu yang sangat tepat dalam menit (misal: "Tumis selama 4 menit sampai bumbu mengeluarkan aroma harum").
-4. Untuk bumbu, jelaskan urutan yang sangat spesifik.
-5. Kalori harus dalam angka bulat (Integer).
-
-Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
-
+  const systemPrompt = `Kamu adalah koki ahli. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. Instruksi harus sangat detail per langkah (api, gramasi, durasi). Kalori bulat integer. Output JSON.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -148,40 +133,19 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
               difficulty: { type: Type.STRING, enum: ['Easy', 'Medium', 'Hard'] },
               prep_time: { type: Type.STRING },
               calories: { type: Type.INTEGER },
-              ingredients_id: { 
-                type: Type.ARRAY, 
-                items: { 
-                  type: Type.OBJECT, 
-                  properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
-                } 
-              },
-              ingredients_en: { 
-                type: Type.ARRAY, 
-                items: { 
-                  type: Type.OBJECT, 
-                  properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } 
-                } 
-              },
-              instructions_id: { type: Type.ARRAY, items: { type: Type.STRING } },
-              instructions_en: { type: Type.ARRAY, items: { type: Type.STRING } }
+              ingredients_id: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } } },
+              instructions_id: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           }
         }
       }
     });
-    
-    const rawRecipes = JSON.parse(response.text || "[]");
-    return rawRecipes.map((r: any) => ({
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      difficulty: r.difficulty,
+    const raw = JSON.parse(response.text || "[]");
+    return raw.map((r: any) => ({
+      ...r,
       prepTime: r.prep_time,
-      calories: Math.round(r.calories || 0),
       ingredientsID: r.ingredients_id,
-      ingredientsEN: r.ingredients_en,
       instructionsID: r.instructions_id,
-      instructionsEN: r.instructions_en,
       imageUrl: "" 
     }));
   } catch (e) { return []; }
@@ -192,12 +156,10 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end food photography of ${title}, appetizing, 4k.` }] }
+      contents: { parts: [{ text: `High-end food photography of ${title}, appetizing.` }] }
     });
     const parts = response.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-    }
+    for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
   } catch (e) {}
   return `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800`;
 };
@@ -210,15 +172,12 @@ export const speakText = async (text: string) => {
       contents: [{ parts: [{ text: cleanText(text) }] }],
       config: { 
         responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
-        }
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
       }
     });
     const audioBase64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!audioBase64) return;
-    const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-    const ctx = new AudioContextClass({ sampleRate: 24000 });
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     const buffer = await decodeAudioData(decode(audioBase64), ctx, 24000, 1);
     const source = ctx.createBufferSource();
     source.buffer = buffer;

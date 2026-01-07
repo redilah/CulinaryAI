@@ -34,7 +34,7 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
       contents: { 
         parts: [
           ...parts,
-          { text: "Tugas: Identifikasi semua bahan makanan atau masakan yang ada di foto ini. Bisa berupa isi kulkas, isi lemari makan, atau satu piring makanan spesifik (misal: ayam goreng). Berikan daftar bahannya saja dipisahkan dengan koma. Jika benar-benar tidak ada makanan, balas hanya dengan kata: BUKAN_MAKANAN." }
+          { text: "Tugas Penting: Identifikasi bahan makanan dari foto ini. Meskipun foto BURAM, PECAH, GELAP, atau KUALITAS RENDAH, tolong identifikasi sebisa mungkin objek yang menyerupai makanan, bahan dapur, atau masakan. Jangan terlalu kaku, gunakan insting koki Anda untuk menebak apa yang ada di sana (misal: jika ada gundukan coklat, mungkin itu ayam goreng atau daging). Berikan daftar singkat saja dipisahkan dengan koma. JANGAN memberikan penjelasan, hanya nama bahan. Jika benar-benar blank/hitam polos, baru balas BUKAN_MAKANAN." }
         ] 
       }
     });
@@ -42,13 +42,13 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
     const responseText = response.text || "";
     const cleanResponse = responseText.toUpperCase().trim();
     
-    if (cleanResponse.includes("BUKAN_MAKANAN")) return ["__INVALID_IMAGE__"];
+    if (cleanResponse === "BUKAN_MAKANAN") return ["__INVALID_IMAGE__"];
     
-    // Split by comma, dot, or newline to be safe
+    // Parsing lebih fleksibel: hapus angka urutan (1. , 2. ) dan filter kata-kata sampah
     const detected = responseText
       .split(/[,\n.]/)
-      .map(s => s.trim().toLowerCase())
-      .filter(s => s.length > 2 && !s.includes("berikut") && !s.includes("daftar"));
+      .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
+      .filter(s => s.length > 1 && !s.includes("berikut") && !s.includes("daftar") && !s.includes("foto"));
       
     return detected;
   } catch (e) { 
