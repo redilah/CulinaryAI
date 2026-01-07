@@ -24,23 +24,33 @@ const App: React.FC = () => {
 
   const handleCapture = async (base64s: string[]) => {
     setLoading(true);
-    const detected = await analyzeFridgeImage(base64s);
-    if (detected.includes("__INVALID_IMAGE__")) {
-      alert("Gambar tidak terbaca sebagai isi kulkas atau bahan makanan. Coba gunakan foto yang lebih jelas.");
-    } else if (detected.length === 0) {
-      alert("Tidak ada bahan yang terdeteksi. Gunakan maksimal 5 foto dari berbagai sudut.");
-    } else {
-      setIngredients(detected);
-      const estimated = await estimateInventory(detected);
-      setInventory(prev => [...prev, ...estimated]);
+    try {
+      const detected = await analyzeFridgeImage(base64s);
       
-      const suggestions = await generateRecipes(detected, dietary);
-      const withImages = await Promise.all(suggestions.map(async r => ({
-        ...r, imageUrl: await generateRecipeImage(r.title)
-      })));
-      setRecipes(withImages);
+      if (detected.includes("__INVALID_IMAGE__")) {
+        alert("Gambar tidak terdeteksi sebagai makanan. Coba ambil foto bahan masakan atau kulkas Anda dengan lebih jelas.");
+      } else if (detected.length === 0) {
+        alert("AI tidak menemukan bahan apapun. Pastikan foto cukup terang dan fokus pada objek makanan.");
+      } else {
+        setIngredients(detected);
+        const estimated = await estimateInventory(detected);
+        setInventory(prev => {
+          const combined = [...prev, ...estimated];
+          // Filter out duplicates by name
+          return combined.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
+        });
+        
+        const suggestions = await generateRecipes(detected, dietary);
+        const withImages = await Promise.all(suggestions.map(async r => ({
+          ...r, imageUrl: await generateRecipeImage(r.title)
+        })));
+        setRecipes(withImages);
+      }
+    } catch (err) {
+      alert("Terjadi kesalahan saat menganalisis foto. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleDietChange = async (d: DietaryRestriction) => {
@@ -119,7 +129,7 @@ const App: React.FC = () => {
                 <h1 className="text-xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
                   My Culinary Assistant
                 </h1>
-                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your fridge/ingredients for smart AI analysis.</p>
+                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your ingredients (fridge, pantry, or specific items).</p>
               </header>
               <FridgeScanner onCapture={handleCapture} loading={loading} detectedIngredients={ingredients} dietary={dietary} />
               <RecipeList recipes={recipes} onSelect={setSelectedRecipe} loading={loading} />

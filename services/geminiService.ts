@@ -22,7 +22,6 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-// Fix: Updated analyzeFridgeImage to accept an array of strings (base64Images) as called in App.tsx
 export const analyzeFridgeImage = async (base64Images: string[]): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
@@ -35,14 +34,23 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
       contents: { 
         parts: [
           ...parts,
-          { text: "Identifikasi semua bahan makanan yang terlihat di foto-foto ini (ini adalah foto kulkas dari berbagai sudut). Pisahkan dengan koma. Jika bukan gambar makanan, balas dengan NOT_FOOD." }
+          { text: "Tugas: Identifikasi semua bahan makanan atau masakan yang ada di foto ini. Bisa berupa isi kulkas, isi lemari makan, atau satu piring makanan spesifik (misal: ayam goreng). Berikan daftar bahannya saja dipisahkan dengan koma. Jika benar-benar tidak ada makanan, balas hanya dengan kata: BUKAN_MAKANAN." }
         ] 
       }
     });
+    
     const responseText = response.text || "";
-    const text = responseText.toUpperCase();
-    if (text.includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
-    return responseText.toLowerCase().split(',').map(s => s.trim()).filter(s => s.length > 2);
+    const cleanResponse = responseText.toUpperCase().trim();
+    
+    if (cleanResponse.includes("BUKAN_MAKANAN")) return ["__INVALID_IMAGE__"];
+    
+    // Split by comma, dot, or newline to be safe
+    const detected = responseText
+      .split(/[,\n.]/)
+      .map(s => s.trim().toLowerCase())
+      .filter(s => s.length > 2 && !s.includes("berikut") && !s.includes("daftar"));
+      
+    return detected;
   } catch (e) { 
     console.error("AI Analysis Error:", e);
     return []; 
@@ -128,7 +136,7 @@ WAJIB: INSTRUKSI HARUS SANGAT DETAIL DAN TERPERINCI (Pecah menjadi minimal 10-15
 2. Setiap langkah WAJIB menyertakan takaran presisi dalam gram (gr) atau mililiter (ml) untuk bumbu dan bahan yang masuk.
 3. Setiap langkah WAJIB menyertakan durasi waktu yang sangat tepat dalam menit (misal: "Tumis selama 4 menit sampai bumbu mengeluarkan aroma harum").
 4. Untuk bumbu, jelaskan urutan yang sangat spesifik.
-5. Kalori harus dalam angka bulat (Integer).
+5. Kalori harus dalam angka bulat (Integer), contoh: 380 kcal.
 
 Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
 
