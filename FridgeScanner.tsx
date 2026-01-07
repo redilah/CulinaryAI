@@ -45,10 +45,11 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md mb-3 group-hover:scale-110 transition-transform duration-300">
                 <i className="fa-solid fa-camera text-2xl text-emerald-500"></i>
               </div>
-              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Snap Photo</p>
+              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Snap / Upload</p>
             </div>
           )}
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" capture="environment" className="hidden" />
+          {/* REMOVED capture attribute to allow gallery selection */}
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
         </div>
 
         {/* Right Side: Ingredients Display */}
