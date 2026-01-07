@@ -26,19 +26,12 @@ const App: React.FC = () => {
   const handleCapture = async (base64s: string[]) => {
     if (base64s.length === 0) return;
     setLoading(true);
-    setLoadingStep("Mengenali bahan...");
+    setLoadingStep("Meneliti bahan di foto...");
     try {
       const detected = await analyzeFridgeImage(base64s);
-      
-      if (detected.length === 0 || detected.includes("__INVALID_IMAGE__")) {
-        alert("AI tidak menemukan bahan makanan. Pastikan foto jelas.");
-        setLoading(false);
-        return;
-      }
-
       setIngredients(detected);
       
-      setLoadingStep("Memperbarui stok digital...");
+      setLoadingStep("Mendata stok digital...");
       const estimated = await estimateInventory(detected);
       setInventory(prev => {
         const combined = [...prev, ...estimated];
@@ -51,21 +44,19 @@ const App: React.FC = () => {
         });
       });
       
-      setLoadingStep("Meracik resep koki bintang 5...");
+      setLoadingStep("Koki meracik resep terbaik...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions.length > 0) {
-        setLoadingStep("Finishing touches...");
+        setLoadingStep("Mengambil foto masakan...");
         const withImages = await Promise.all(suggestions.map(async r => ({
           ...r, imageUrl: await generateRecipeImage(r.title)
         })));
         setRecipes(withImages);
-      } else {
-        alert("Tidak ada resep yang cocok.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error memproses gambar.");
+      alert("Maaf, terjadi masalah koneksi. Silakan coba lagi.");
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -76,7 +67,7 @@ const App: React.FC = () => {
     setDietary(d);
     if (ingredients.length > 0) {
       setLoading(true);
-      setLoadingStep(`Menyesuaikan menu ${d}...`);
+      setLoadingStep(`Menyesuaikan resep ${d}...`);
       const suggestions = await generateRecipes(ingredients, d);
       const withImages = await Promise.all(suggestions.map(async r => ({
         ...r, imageUrl: await generateRecipeImage(r.title)
@@ -89,7 +80,7 @@ const App: React.FC = () => {
 
   const handleGeneratePlan = async () => {
     setLoading(true);
-    setLoadingStep("Menyusun meal plan...");
+    setLoadingStep("Menyusun jadwal makan...");
     setActiveTab('planner');
     const plan = await generateMealPlan(inventory);
     setMealPlan(plan);
@@ -133,7 +124,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 min-w-0 p-5 md:p-12 lg:p-16 pb-32 overflow-y-auto scrollbar-hide">
-        {/* Top Header Mobile */}
         <div className="md:hidden flex items-center justify-between mb-8">
            <div className="flex items-center space-x-3">
              <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-100">
@@ -187,8 +177,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Mobile White Capsule Navigation */}
-      <nav className="md:hidden fixed bottom-6 left-5 right-5 z-40 bg-white/90 backdrop-blur-md border border-slate-100 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
+      <nav className="md:hidden fixed bottom-6 left-5 right-5 z-40 bg-white border border-slate-100 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-1.5 flex items-center justify-between">
         {navItems.map((item) => (
           <button
             key={item.id}
