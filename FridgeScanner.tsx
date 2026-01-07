@@ -1,40 +1,34 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { DietaryRestriction } from './types';
 
 interface FridgeScannerProps {
   onCapture: (base64s: string[]) => void;
   detectedIngredients: string[];
   loading: boolean;
+  loadingStep?: string;
   dietary: DietaryRestriction;
 }
 
-const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngredients, loading, dietary }) => {
+const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngredients, loading, loadingStep, dietary }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedCount, setSelectedCount] = useState(0);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files as FileList;
-    let files = Array.from(fileList || []);
-    if (files.length === 0) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
     
-    // Limit to maximum 5 photos as requested
-    if (files.length > 5) {
-      alert("Maksimal 5 foto saja ya agar proses tetap cepat dan akurat.");
-      files = files.slice(0, 5);
-    }
+    // Fix: Explicitly cast Array.from result to File[] to prevent 'unknown' type inference
+    const files = (Array.from(fileList) as File[]).slice(0, 5);
     
-    setSelectedCount(files.length);
-
     try {
-      const base64Promises = files.map((file: File) => {
-        return new Promise<string>((resolve, reject) => {
+      const base64Promises = files.map((file) => {
+        return new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
             resolve(result.split(',')[1]);
           };
-          reader.onerror = () => reject(new Error("Gagal membaca file"));
+          // Fix: Ensure 'file' is typed as Blob/File for readAsDataURL
           reader.readAsDataURL(file);
         });
       });
@@ -42,34 +36,36 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
       const base64s = await Promise.all(base64Promises);
       onCapture(base64s);
     } catch (err) {
-      console.error("Error reading files:", err);
-      alert("Gagal memproses gambar. Coba pilih foto dengan ukuran lebih kecil.");
+      console.error(err);
+      alert("Gagal memproses gambar.");
     }
   };
 
   return (
-    <section className="bg-white rounded-[2.5rem] p-5 md:p-6 shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-visible animate-in fade-in slide-in-from-bottom-6 duration-700">
-      <div className="flex flex-col lg:flex-row items-stretch gap-6">
+    <section className="bg-white rounded-[3rem] p-6 md:p-10 shadow-2xl shadow-slate-200/40 border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+      <div className="flex flex-col lg:flex-row items-stretch gap-10">
         
-        {/* Left Side: Capture Action */}
+        {/* Upload Box */}
         <div 
           onClick={() => !loading && fileInputRef.current?.click()}
-          className={`relative w-full lg:w-[35%] min-h-[160px] lg:min-h-[200px] bg-slate-50 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center cursor-pointer transition-all shrink-0 ${
-            loading ? 'opacity-50 cursor-wait' : 'hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-xl border-slate-200 group'
+          className={`relative w-full lg:w-[45%] min-h-[220px] rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all border-4 border-dashed overflow-hidden ${
+            loading 
+              ? 'bg-slate-50 border-emerald-200 cursor-wait' 
+              : 'bg-slate-50 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 group'
           }`}
         >
           {loading ? (
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-              <p className="mt-3 text-emerald-600 font-black text-[9px] uppercase tracking-[0.2em]">Analysing {selectedCount} Photos...</p>
+            <div className="flex flex-col items-center text-center p-8">
+              <div className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-6"></div>
+              <p className="text-emerald-700 font-black text-sm uppercase tracking-widest">{loadingStep || "Analyzing..."}</p>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center p-4 text-center">
-              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md mb-3 group-hover:scale-110 transition-transform duration-300">
-                <i className="fa-solid fa-camera-retro text-2xl text-emerald-500"></i>
+            <div className="flex flex-col items-center text-center p-10 group-hover:scale-105 transition-transform duration-500">
+              <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl mb-6">
+                <i className="fa-solid fa-camera-retro text-4xl text-emerald-500"></i>
               </div>
-              <p className="text-slate-800 font-black uppercase text-[10px] tracking-[0.15em]">Snap Fridge Photos</p>
-              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Maximum 5 photos per analysis</p>
+              <p className="text-slate-900 font-black uppercase text-sm tracking-widest">Scan Ingredients</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase mt-2 tracking-widest">Supports up to 5 photos</p>
             </div>
           )}
           <input 
@@ -82,42 +78,31 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
           />
         </div>
 
-        {/* Right Side: Ingredients Display */}
-        <div className="flex-1 bg-slate-50/40 rounded-[2rem] p-4 md:p-8 border border-slate-100/50 flex flex-col justify-start min-h-[140px]">
-          <header className="flex items-center justify-between mb-4 flex-wrap gap-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="relative shrink-0">
-                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-              </div>
-              <h2 className="text-sm md:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">Inventory Detected</h2>
-            </div>
-            
+        {/* Results Preview */}
+        <div className="flex-1 bg-slate-50/60 rounded-[2.5rem] p-8 md:p-10 border border-slate-100">
+          <header className="flex items-center justify-between mb-8">
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter">Inventory Detected</h2>
             {dietary !== DietaryRestriction.None && (
-              <div className="bg-slate-900 text-white px-2 py-1 rounded shadow-md">
-                <span className="text-[8px] font-black uppercase tracking-widest leading-none">
-                  {dietary}
-                </span>
-              </div>
+              <span className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                {dietary} Mode
+              </span>
             )}
           </header>
           
-          <div className="flex flex-wrap gap-2 content-start">
+          <div className="flex flex-wrap gap-3">
             {detectedIngredients.length > 0 ? (
               detectedIngredients.map((ing, idx) => (
                 <div 
                   key={idx} 
-                  className="bg-white text-emerald-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide border border-emerald-100/50 shadow-sm flex items-center gap-1.5 animate-in zoom-in"
-                  style={{ animationDelay: `${idx * 40}ms` }}
+                  className="bg-white text-emerald-700 px-5 py-2.5 rounded-2xl text-xs md:text-sm font-black border border-emerald-100 shadow-sm animate-in zoom-in"
                 >
-                  <span className="w-1 h-1 bg-emerald-400 rounded-full"></span>
                   {ing}
                 </div>
               ))
             ) : (
-              <div className="flex flex-col w-full opacity-60">
-                 <p className="text-slate-500 italic text-xs font-semibold tracking-tight">
-                    No ingredients found. Upload up to 5 photos.
-                 </p>
+              <div className="w-full py-10 opacity-30 text-center flex flex-col items-center">
+                 <i className="fa-solid fa-wand-magic-sparkles text-4xl mb-4 text-slate-300"></i>
+                 <p className="text-slate-500 italic text-sm font-bold">Snap a photo to start AI detection.</p>
               </div>
             )}
           </div>

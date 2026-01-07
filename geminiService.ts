@@ -34,31 +34,26 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
       contents: { 
         parts: [
           ...parts,
-          { text: "SANGAT PENTING: Kamu adalah detektif kuliner yang super teliti. Kamu harus menganalisis foto ini, meskipun gambarnya BURUK, BLUR, GELAP, atau hanya terlihat sebentar. Jika kamu melihat warna merah, asumsikan itu saus, tomat, atau daging. Jika kamu melihat piring/wadah, tebak isinya (misal: nasi, ayam, sayur). Kamu DILARANG membalas dengan daftar kosong. Minimal berikan 2 bahan yang paling masuk akal terlihat di sana. Format: nama_bahan1, nama_bahan2. Gunakan Bahasa Indonesia." }
+          { text: "PERAN: Master Food Detective. TUGAS: Identifikasi semua bahan makanan di foto. Bisa di meja, pantry, dapur, atau kulkas. WAJIB MENEBAK jika foto blur atau pecah. Berikan daftar nama bahan saja dipisahkan koma dalam Bahasa Indonesia. Contoh: wortel, tomat, ayam goreng, kecap manis." }
         ] 
       }
     });
     
     const responseText = response.text || "";
-    // Jika AI tetap membandel atau memberikan teks deskriptif, kita bersihkan
     const detected = responseText
       .split(/[,\n]/)
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
-      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("tidak"));
+      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("tidak bisa"));
       
-    // Jika masih kosong, berikan fallback agar sistem tidak error (tebakan umum berdasarkan "makanan")
-    if (detected.length === 0) return ["bahan makanan"];
-      
-    return detected;
+    return detected.length > 0 ? detected : ["bahan makanan", "bumbu"];
   } catch (e) { 
-    console.error("AI Analysis Error:", e);
-    return ["bahan dapur"]; 
+    return ["bahan makanan"]; 
   }
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `For these ingredients: ${ingredients.join(', ')}. Estimate their typical shelf life in a fridge. Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and days_remaining.`;
+  const prompt = `Bahan: ${ingredients.join(', ')}. Estimasikan masa simpan. Return JSON array InventoryItem (name, category, days_remaining).`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -90,38 +85,9 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
   } catch (e) { return []; }
 };
 
-export const generateMealPlan = async (inventory: InventoryItem[]): Promise<MealPlanDay[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const expiringSoon = [...inventory].sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 5).map(i => i.name);
-  const prompt = `Create a 3-day meal plan using these items: ${expiringSoon.join(', ')}. Indonesian Language. JSON format.`;
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              day: { type: Type.STRING },
-              breakfast: { type: Type.STRING },
-              lunch: { type: Type.STRING },
-              dinner: { type: Type.STRING },
-              reason: { type: Type.STRING }
-            }
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "[]");
-  } catch (e) { return []; }
-};
-
 export const generateRecipes = async (ingredients: string[], restriction: DietaryRestriction): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. Detail api, gramasi, durasi. JSON.`;
+  const systemPrompt = `Buat 4 resep lezat untuk diet ${restriction} dari: ${ingredients.join(', ')}. WAJIB DETAIL: ukuran api, takaran presisi, dan durasi menit per langkah. JSON Bahasa Indonesia.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -146,10 +112,9 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
         }
       }
     });
-    const rawRecipes = JSON.parse(response.text || "[]");
-    return rawRecipes.map((r: any) => ({
+    const raw = JSON.parse(response.text || "[]");
+    return raw.map((r: any) => ({
       ...r,
-      id: r.id || Math.random().toString(),
       prepTime: r.prep_time,
       ingredientsID: r.ingredients_id,
       instructionsID: r.instructions_id,
@@ -163,7 +128,7 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end food photography of ${title}, appetizing, 4k.` }] }
+      contents: { parts: [{ text: `High-end food photography of ${title}, appetising, 4k.` }] }
     });
     const parts = response.candidates?.[0]?.content?.parts || [];
     for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
@@ -191,4 +156,33 @@ export const speakText = async (text: string) => {
     source.connect(ctx.destination);
     source.start();
   } catch (e) {}
+};
+
+export const generateMealPlan = async (inventory: InventoryItem[]): Promise<MealPlanDay[]> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const expiringSoon = [...inventory].sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 5).map(i => i.name);
+  const prompt = `Jadwal makan 3 hari dari: ${expiringSoon.join(', ')}. JSON Bahasa Indonesia.`;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              day: { type: Type.STRING },
+              breakfast: { type: Type.STRING },
+              lunch: { type: Type.STRING },
+              dinner: { type: Type.STRING },
+              reason: { type: Type.STRING }
+            }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "[]");
+  } catch (e) { return []; }
 };

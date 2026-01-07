@@ -7,8 +7,8 @@ import FridgeScanner from './FridgeScanner';
 import RecipeList from './RecipeList';
 import CookingMode from './CookingMode';
 import ShoppingList from './ShoppingList';
-import InventoryDashboard from './components/InventoryDashboard';
-import MealPlanner from './components/MealPlanner';
+import InventoryDashboard from './InventoryDashboard';
+import MealPlanner from './MealPlanner';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'fridge' | 'inventory' | 'planner' | 'shopping'>('fridge');
@@ -20,39 +20,44 @@ const App: React.FC = () => {
   const [dietary, setDietary] = useState<DietaryRestriction>(DietaryRestriction.None);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleCapture = async (base64s: string[]) => {
     setLoading(true);
-    // Kita berikan waktu minimal 5 detik agar user merasa sistem benar-benar meneliti
-    const minWait = new Promise(resolve => setTimeout(resolve, 5500));
-    
+    setLoadingStep("Mengenali bahan masakan...");
     try {
-      const [detected] = await Promise.all([
-        analyzeFridgeImage(base64s),
-        minWait
-      ]);
-
-      if (detected.length === 0) {
-        alert("Bahan tidak ditemukan. AI mencoba menebak tapi gambar terlalu tidak jelas. Coba ambil foto dari sudut lain.");
-      } else {
-        setIngredients(detected);
-        const estimated = await estimateInventory(detected);
-        setInventory(prev => {
-          const combined = [...prev, ...estimated];
-          return combined.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
+      const detected = await analyzeFridgeImage(base64s);
+      setIngredients(detected);
+      
+      setLoadingStep("Menyimpan ke stok digital...");
+      const estimated = await estimateInventory(detected);
+      setInventory(prev => {
+        const combined = [...prev, ...estimated];
+        const seen = new Set();
+        return combined.filter(item => {
+          const duplicate = seen.has(item.name.toLowerCase());
+          seen.add(item.name.toLowerCase());
+          return !duplicate;
         });
-        
-        const suggestions = await generateRecipes(detected, dietary);
+      });
+      
+      setLoadingStep("Meracik resep lezat...");
+      const suggestions = await generateRecipes(detected, dietary);
+      
+      if (suggestions.length > 0) {
+        setLoadingStep("Finishing touches...");
         const withImages = await Promise.all(suggestions.map(async r => ({
           ...r, imageUrl: await generateRecipeImage(r.title)
         })));
         setRecipes(withImages);
       }
     } catch (err) {
-      alert("Terjadi masalah saat memproses gambar. Coba kurangi jumlah foto jika internet lambat.");
+      console.error(err);
+      alert("Terjadi masalah saat memproses gambar.");
     } finally {
       setLoading(false);
+      setLoadingStep("");
     }
   };
 
@@ -60,25 +65,29 @@ const App: React.FC = () => {
     setDietary(d);
     if (ingredients.length > 0) {
       setLoading(true);
+      setLoadingStep(`Menyesuaikan menu ${d}...`);
       const suggestions = await generateRecipes(ingredients, d);
       const withImages = await Promise.all(suggestions.map(async r => ({
         ...r, imageUrl: await generateRecipeImage(r.title)
       })));
       setRecipes(withImages);
       setLoading(false);
+      setLoadingStep("");
     }
   };
 
   const handleGeneratePlan = async () => {
     setLoading(true);
+    setLoadingStep("Menyusun meal plan...");
     setActiveTab('planner');
     const plan = await generateMealPlan(inventory);
     setMealPlan(plan);
     setLoading(false);
+    setLoadingStep("");
   };
 
   const addToShoppingList = (name: string) => {
-    if (!shoppingList.find(i => i.name === name)) {
+    if (!shoppingList.find(i => i.name.toLowerCase() === name.toLowerCase())) {
       setShoppingList(prev => [...prev, { id: Date.now().toString(), name, checked: false }]);
     }
   };
@@ -95,8 +104,8 @@ const App: React.FC = () => {
   }
 
   const navItems = [
-    { id: 'fridge', icon: 'fa-camera', label: 'Scanner' },
-    { id: 'inventory', icon: 'fa-boxes-stacked', label: 'Stock' },
+    { id: 'fridge', icon: 'fa-camera', label: 'Scan' },
+    { id: 'inventory', icon: 'fa-boxes-stacked', label: 'Stok' },
     { id: 'planner', icon: 'fa-calendar-days', label: 'Plan' },
     { id: 'shopping', icon: 'fa-basket-shopping', label: 'List' },
   ];
@@ -112,29 +121,38 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
       
-      <main className="flex-1 min-w-0 p-4 md:p-12 lg:p-16 pb-32 md:pb-12 overflow-y-auto">
-        <div className="md:hidden flex items-center justify-between mb-6">
-           <div className="flex items-center space-x-2">
-             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white text-xs">
+      <main className="flex-1 min-w-0 p-5 md:p-12 lg:p-16 pb-32 overflow-y-auto">
+        {/* Top Header Mobile */}
+        <div className="md:hidden flex items-center justify-between mb-8">
+           <div className="flex items-center space-x-3">
+             <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-100">
                <i className="fa-solid fa-leaf"></i>
              </div>
-             <span className="font-black text-slate-800 tracking-tighter text-lg">CulinaryAI</span>
+             <span className="font-black text-slate-800 text-xl tracking-tighter">CulinaryAI</span>
            </div>
-           <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 bg-white rounded-xl shadow-sm border border-slate-100">
+           <button onClick={() => setIsSidebarOpen(true)} className="w-11 h-11 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 text-slate-600 active:scale-95 transition-transform">
              <i className="fa-solid fa-bars-staggered text-lg"></i>
            </button>
         </div>
 
         <div className="max-w-6xl mx-auto">
           {activeTab === 'fridge' && (
-            <div className="space-y-8 md:space-y-12">
-              <header className="space-y-1">
-                <h1 className="text-xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
+            <div className="space-y-10">
+              <header className="space-y-2">
+                <h1 className="text-2xl xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                   My Culinary Assistant
                 </h1>
-                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your ingredients. AI will try its best to scan everything.</p>
+                <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">
+                  Snap any food ingredients from your fridge or kitchen. AI will instantly recognize items and suggest gourmet recipes.
+                </p>
               </header>
-              <FridgeScanner onCapture={handleCapture} loading={loading} detectedIngredients={ingredients} dietary={dietary} />
+              <FridgeScanner 
+                onCapture={handleCapture} 
+                loading={loading} 
+                loadingStep={loadingStep} 
+                detectedIngredients={ingredients} 
+                dietary={dietary} 
+              />
               <RecipeList recipes={recipes} onSelect={setSelectedRecipe} loading={loading} />
             </div>
           )}
@@ -158,15 +176,16 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-40 bg-white/90 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-lg p-1.5 flex items-center justify-between">
+      {/* Mobile White Capsule Navigation */}
+      <nav className="md:hidden fixed bottom-6 left-5 right-5 z-40 bg-white border border-slate-100 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-1.5 flex items-center justify-between">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id as any)}
-            className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-[1.2rem] transition-all ${activeTab === item.id ? 'text-emerald-600 font-black bg-emerald-50/50' : 'text-slate-400 font-medium'}`}
+            className={`flex-1 flex flex-col items-center justify-center py-3 rounded-[2rem] transition-all duration-300 ${activeTab === item.id ? 'text-emerald-600 bg-emerald-50 font-black' : 'text-slate-400 font-medium hover:text-slate-600'}`}
           >
-            <i className={`fa-solid ${item.icon} text-base mb-0.5`}></i>
-            <span className="text-[9px] uppercase tracking-wider">{item.label}</span>
+            <i className={`fa-solid ${item.icon} text-lg mb-0.5`}></i>
+            <span className="text-[9px] uppercase tracking-widest leading-none">{item.label}</span>
           </button>
         ))}
       </nav>
