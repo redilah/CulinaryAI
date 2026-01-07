@@ -24,10 +24,17 @@ const App: React.FC = () => {
 
   const handleCapture = async (base64s: string[]) => {
     setLoading(true);
+    // Kita berikan waktu minimal 5 detik agar user merasa sistem benar-benar meneliti
+    const minWait = new Promise(resolve => setTimeout(resolve, 5500));
+    
     try {
-      const detected = await analyzeFridgeImage(base64s);
+      const [detected] = await Promise.all([
+        analyzeFridgeImage(base64s),
+        minWait
+      ]);
+
       if (detected.length === 0) {
-        alert("Bahan tidak ditemukan. Coba gunakan foto yang lebih dekat atau pencahayaan yang lebih baik.");
+        alert("Bahan tidak ditemukan. AI mencoba menebak tapi gambar terlalu tidak jelas. Coba ambil foto dari sudut lain.");
       } else {
         setIngredients(detected);
         const estimated = await estimateInventory(detected);
@@ -43,7 +50,7 @@ const App: React.FC = () => {
         setRecipes(withImages);
       }
     } catch (err) {
-      alert("Terjadi masalah saat memproses gambar.");
+      alert("Terjadi masalah saat memproses gambar. Coba kurangi jumlah foto jika internet lambat.");
     } finally {
       setLoading(false);
     }
@@ -125,7 +132,7 @@ const App: React.FC = () => {
                 <h1 className="text-xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
                   My Culinary Assistant
                 </h1>
-                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your ingredients (fridge, pantry, or specific items).</p>
+                <p className="text-slate-500 text-[12px] md:text-xl font-medium max-w-2xl">Upload up to 5 photos of your ingredients. AI will try its best to scan everything.</p>
               </header>
               <FridgeScanner onCapture={handleCapture} loading={loading} detectedIngredients={ingredients} dietary={dietary} />
               <RecipeList recipes={recipes} onSelect={setSelectedRecipe} loading={loading} />

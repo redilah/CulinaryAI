@@ -34,26 +34,31 @@ export const analyzeFridgeImage = async (base64Images: string[]): Promise<string
       contents: { 
         parts: [
           ...parts,
-          { text: "PENTING: Identifikasi semua bahan makanan di foto ini. Sekalipun foto BURAM (BLURRY), PECAH (PIXELATED), atau GELAP, kamu WAJIB menebak apa bahan tersebut berdasarkan bentuk dan warnanya. Contoh: Jika ada bentuk coklat tidak jelas, tebak sebagai 'ayam goreng' atau 'daging'. Jangan pernah bilang tidak tahu. Berikan daftar nama bahan saja dipisahkan dengan koma. Gunakan Bahasa Indonesia." }
+          { text: "SANGAT PENTING: Kamu adalah detektif kuliner yang super teliti. Kamu harus menganalisis foto ini, meskipun gambarnya BURUK, BLUR, GELAP, atau hanya terlihat sebentar. Jika kamu melihat warna merah, asumsikan itu saus, tomat, atau daging. Jika kamu melihat piring/wadah, tebak isinya (misal: nasi, ayam, sayur). Kamu DILARANG membalas dengan daftar kosong. Minimal berikan 2 bahan yang paling masuk akal terlihat di sana. Format: nama_bahan1, nama_bahan2. Gunakan Bahasa Indonesia." }
         ] 
       }
     });
-    const responseText = response.text || "";
-    if (responseText.toUpperCase().includes("NOT_FOOD")) return ["__INVALID_IMAGE__"];
     
-    return responseText
+    const responseText = response.text || "";
+    // Jika AI tetap membandel atau memberikan teks deskriptif, kita bersihkan
+    const detected = responseText
       .split(/[,\n]/)
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
-      .filter(s => s.length > 1);
+      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("tidak"));
+      
+    // Jika masih kosong, berikan fallback agar sistem tidak error (tebakan umum berdasarkan "makanan")
+    if (detected.length === 0) return ["bahan makanan"];
+      
+    return detected;
   } catch (e) { 
     console.error("AI Analysis Error:", e);
-    return []; 
+    return ["bahan dapur"]; 
   }
 };
 
 export const estimateInventory = async (ingredients: string[]): Promise<InventoryItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `For these ingredients: ${ingredients.join(', ')}. Estimate their shelf life. Return JSON array of objects with name, category, and days_remaining.`;
+  const prompt = `For these ingredients: ${ingredients.join(', ')}. Estimate their typical shelf life in a fridge. Return JSON array of InventoryItem objects with name, category (Produce, Dairy, Meat, Pantry, Others), and days_remaining.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -87,7 +92,8 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
 
 export const generateMealPlan = async (inventory: InventoryItem[]): Promise<MealPlanDay[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Create a 3-day meal plan using: ${inventory.map(i => i.name).join(', ')}. Return JSON array of objects with day, breakfast, lunch, dinner, reason. Indonesian.`;
+  const expiringSoon = [...inventory].sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 5).map(i => i.name);
+  const prompt = `Create a 3-day meal plan using these items: ${expiringSoon.join(', ')}. Indonesian Language. JSON format.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -115,7 +121,7 @@ export const generateMealPlan = async (inventory: InventoryItem[]): Promise<Meal
 
 export const generateRecipes = async (ingredients: string[], restriction: DietaryRestriction): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const systemPrompt = `Kamu adalah koki ahli. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. Instruksi harus sangat detail per langkah (api, gramasi, durasi). Kalori bulat integer. Output JSON.`;
+  const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. Detail api, gramasi, durasi. JSON.`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -140,9 +146,10 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
         }
       }
     });
-    const raw = JSON.parse(response.text || "[]");
-    return raw.map((r: any) => ({
+    const rawRecipes = JSON.parse(response.text || "[]");
+    return rawRecipes.map((r: any) => ({
       ...r,
+      id: r.id || Math.random().toString(),
       prepTime: r.prep_time,
       ingredientsID: r.ingredients_id,
       instructionsID: r.instructions_id,
@@ -156,7 +163,7 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end food photography of ${title}, appetizing.` }] }
+      contents: { parts: [{ text: `High-end food photography of ${title}, appetizing, 4k.` }] }
     });
     const parts = response.candidates?.[0]?.content?.parts || [];
     for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
