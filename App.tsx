@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
-import Sidebar from './components/Sidebar';
+import Sidebar from './Sidebar';
 import FridgeScanner from './FridgeScanner';
 import RecipeList from './RecipeList';
 import CookingMode from './CookingMode';
@@ -23,7 +23,6 @@ const App: React.FC = () => {
   const [loadingStep, setLoadingStep] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Fungsi untuk update loading dari komponen Scanner
   const handleProcessing = (step: string) => {
     if (step) {
       setLoading(true);
@@ -42,11 +41,11 @@ const App: React.FC = () => {
     
     setLoading(true);
     try {
-      setLoadingStep("AI sedang menganalisa...");
+      setLoadingStep("Membaca foto Anda...");
       const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
-      setLoadingStep("Meracik menu spesial...");
+      setLoadingStep("AI sedang meracik resep atomic...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions && suggestions.length > 0) {
@@ -54,14 +53,11 @@ const App: React.FC = () => {
         setLoading(false);
         setLoadingStep("");
 
-        // Background loading untuk gambar agar tidak nunggu lama
         suggestions.forEach(async (r, idx) => {
           try {
             const img = await generateRecipeImage(r.title);
             setRecipes(prev => prev.map((rec, i) => i === idx ? {...rec, imageUrl: img} : rec));
-          } catch (e) {
-            console.warn("Image generation failed for:", r.title);
-          }
+          } catch (e) {}
         });
 
         estimateInventory(detected).then(estimated => {
@@ -70,14 +66,12 @@ const App: React.FC = () => {
       } else {
         setLoading(false);
         setLoadingStep("");
-        alert("Bahan tidak terdeteksi. Silakan coba ambil foto yang lebih jelas.");
+        alert("AI gagal membuat resep. Coba lagi.");
       }
-
-    } catch (err) {
-      console.error("Critical Error:", err);
+    } catch (err: any) {
       setLoading(false);
       setLoadingStep("");
-      alert("Terjadi kesalahan pada sistem AI.");
+      alert(`Gangguan: ${err?.message || "Koneksi tidak stabil"}`);
     }
   };
 
@@ -172,7 +166,7 @@ const App: React.FC = () => {
                   My Kitchen Assistant
                 </h1>
                 <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">
-                  Foto bahan makananmu, AI akan beraksi seketika.
+                  Ambil foto bahan makanan Anda, biarkan AI bekerja dengan presisi tinggi.
                 </p>
               </header>
               <FridgeScanner 
