@@ -25,28 +25,32 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
 export const analyzeFridgeImage = async (base64: string): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    // Membersihkan prefix base64 (data:image/jpeg;base64,) yang sering dikirim browser mobile
+    const sanitizedBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
         parts: [
-          { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
-          { text: "TUGAS: Identifikasi bahan makanan yang terlihat secara nyata di foto ini. SYARAT MUTLAK: JANGAN menebak-nebak. Hanya sebutkan bahan yang benar-benar teridentifikasi jelas melalui bentuk, label, atau warna yang eksplisit. Jika Anda tidak yakin 100% tentang suatu objek, JANGAN sebutkan. Jangan berasumsi tentang isi dalam wadah tertutup yang tidak tembus pandang. Jika gambar terlalu buram atau tidak menunjukkan bahan makanan, kembalikan daftar kosong. Balas hanya dengan daftar nama bahan saja dipisahkan dengan koma dalam Bahasa Indonesia tanpa kata pengantar atau penjelasan tambahan." }
+          { inlineData: { data: sanitizedBase64, mimeType: 'image/jpeg' } },
+          { text: "Identifikasi bahan makanan dalam gambar ini secara akurat. Sebutkan nama-namanya saja dipisahkan koma. Gunakan bahasa Indonesia. JANGAN menebak jika tidak jelas. Jika tidak ada bahan yang terlihat, kembalikan daftar kosong." }
         ] 
       }
     });
     
     const responseText = response.text || "";
-    const detected = responseText
+    if (!responseText || responseText.length < 3) {
+      return [];
+    }
+
+    return responseText
       .split(/[,\n]/)
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
       .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("gambar"));
       
-    return detected;
   } catch (e) { 
-    console.error("Analysis service failed:", e);
-    return []; 
+    console.error("ERROR ANALISA GAMBAR:", e);
+    throw e; 
   }
 };
 
@@ -55,12 +59,13 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
   
   const systemPrompt = `Kamu adalah koki ahli bintang 5. Buat 4 resep lezat untuk diet ${restriction} menggunakan bahan: ${ingredients.join(', ')}. 
 
-WAJIB: INSTRUKSI SANGAT DETAIL (10-15 langkah kecil per resep):
-1. UKURAN API: Sebutkan di setiap langkah (api lilin, sedang, besar).
-2. TAKARAN: Gunakan gram (gr) atau mililiter (ml).
-3. TIMER: Sebutkan menit/detik yang akurat.
-4. URUTAN: Masukkan bumbu satu per satu.
-5. KALORI: Angka bulat (Integer).
+WAJIB DAN MUTLAK: INSTRUKSI HARUS SANGAT ATOMIK DAN DETAIL (10-15 langkah kecil per resep):
+1. UKURAN API: Wajib sebutkan di setiap langkah proses masak.
+2. TAKARAN PRESISI: Wajib sebutkan berat dalam gram (gr) atau mililiter (ml).
+3. TIMER AKURAT: Wajib sebutkan durasi dalam menit atau detik.
+4. URUTAN BUMBU: Masukkan bumbu satu per satu.
+5. JUMLAH LANGKAH: Wajib antara 10 sampai 15 langkah.
+6. KALORI: Wajib angka bulat (Integer).
 
 Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
 
@@ -105,10 +110,7 @@ Sediakan output dalam JSON untuk Bahasa Indonesia (ID) dan English (EN).`;
       instructionsEN: r.instructions_en,
       imageUrl: "" 
     }));
-  } catch (e) { 
-    console.error("Recipe service failed:", e);
-    return []; 
-  }
+  } catch (e) { return []; }
 };
 
 export const generateRecipeImage = async (title: string): Promise<string> => {
@@ -116,11 +118,10 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style plating, macro shot, 8k resolution.` }] }
+      contents: { parts: [{ text: `High-end professional food photography of ${title}, restaurant style plating, 8k resolution, macro shot.` }] }
     });
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-    }
+    const parts = response.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
   } catch (e) {}
   return `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800`;
 };

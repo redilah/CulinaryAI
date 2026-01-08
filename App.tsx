@@ -26,59 +26,61 @@ const App: React.FC = () => {
   const handleCapture = async (base64: string) => {
     if (!base64) return;
     setLoading(true);
-    setLoadingStep("Meneliti bahan di foto...");
     
     try {
       // 1. Deteksi Bahan (Wajib)
+      setLoadingStep("Meneliti bahan...");
       const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
       if (detected.length === 0) {
         setLoading(false);
-        alert("Tidak ada bahan yang terdeteksi jelas. Coba foto lebih dekat atau dengan cahaya yang lebih baik.");
+        alert("Tidak ada bahan yang terdeteksi. Pastikan foto cukup terang.");
         return;
       }
 
-      // 2. Generate Resep (Prioritas Utama UI)
-      setLoadingStep("Koki meracik resep terbaik...");
+      // 2. Generate Resep (UTAMA - Munculkan ini secepat mungkin)
+      setLoadingStep("Koki meracik resep...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions && suggestions.length > 0) {
-        // Tampilkan resep segera tanpa menunggu gambar atau inventori
-        setRecipes(suggestions);
-        setLoading(false); // Matikan loading di sini agar resep langsung bisa dilihat
-        setLoadingStep("");
-
-        // 3. Proses Background: Ambil Gambar (Non-Blocking)
-        suggestions.forEach(async (r, idx) => {
-          try {
-            const img = await generateRecipeImage(r.title);
-            setRecipes(prev => prev.map((rec, i) => i === idx ? { ...rec, imageUrl: img } : rec));
-          } catch (e) {
-            console.error("Gagal memuat gambar resep:", r.title);
-          }
-        });
-
-        // 4. Proses Background: Update Inventori (Non-Blocking)
-        estimateInventory(detected).then(estimated => {
-          setInventory(prev => {
-            const combined = [...prev, ...estimated];
-            const seen = new Set();
-            return combined.filter(item => {
-              const key = item.name.toLowerCase();
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-          });
-        }).catch(e => console.error("Inventory background error diabaikan"));
-      } else {
-        setLoading(false);
+        setRecipes(suggestions); // Tampilkan teks resep DULU
       }
-    } catch (err) {
-      console.error("Critical Capture Error:", err);
-      alert("Maaf, terjadi masalah koneksi. Silakan coba lagi.");
+
+      // 3. Matikan loading utama agar user bisa melihat resep segera
       setLoading(false);
+      setLoadingStep("");
+
+      // 4. Proses Background (Jangan pakai 'await' agar tidak menghambat resep)
+      // Ambil Gambar secara bertahap di background
+      suggestions.forEach(async (r, idx) => {
+        try {
+          const img = await generateRecipeImage(r.title);
+          setRecipes(prev => prev.map((rec, i) => i === idx ? {...rec, imageUrl: img} : rec));
+        } catch (e) {
+          console.log("Gagal ambil gambar untuk:", r.title);
+        }
+      });
+
+      // Update Inventori secara background
+      estimateInventory(detected).then(estimated => {
+        setInventory(prev => {
+          const combined = [...prev, ...estimated];
+          const seen = new Set();
+          return combined.filter(item => {
+            const key = item.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        });
+      }).catch(e => console.log("Inventory error diabaikan"));
+
+    } catch (err) {
+      console.error("Critical Error:", err);
+      alert("Terjadi kesalahan teknis. Silakan periksa koneksi Anda.");
+      setLoading(false);
+      setLoadingStep("");
     }
   };
 
