@@ -3,12 +3,12 @@ import React, { useState } from 'react';
 import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
 import Sidebar from './components/Sidebar';
-import FridgeScanner from './components/FridgeScanner';
-import RecipeList from './components/RecipeList';
-import CookingMode from './components/CookingMode';
-import ShoppingList from './components/ShoppingList';
-import InventoryDashboard from './components/InventoryDashboard';
-import MealPlanner from './components/MealPlanner';
+import FridgeScanner from './FridgeScanner';
+import RecipeList from './RecipeList';
+import CookingMode from './CookingMode';
+import ShoppingList from './ShoppingList';
+import InventoryDashboard from './InventoryDashboard';
+import MealPlanner from './MealPlanner';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'fridge' | 'inventory' | 'planner' | 'shopping'>('fridge');
@@ -23,31 +23,44 @@ const App: React.FC = () => {
   const [loadingStep, setLoadingStep] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // Fungsi untuk update loading dari komponen Scanner
+  const handleProcessing = (step: string) => {
+    if (step) {
+      setLoading(true);
+      setLoadingStep(step);
+    } else {
+      setLoading(false);
+      setLoadingStep("");
+    }
+  };
+
   const handleCapture = async (base64: string) => {
-    if (!base64) return;
-    setLoading(true);
+    if (!base64) {
+      setLoading(false);
+      return;
+    }
     
+    setLoading(true);
     try {
-      setLoadingStep("Menganalisa foto...");
+      setLoadingStep("AI sedang menganalisa...");
       const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
-      setLoadingStep("Meracik resep...");
+      setLoadingStep("Meracik menu spesial...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions && suggestions.length > 0) {
-        // UI NON-BLOCKING: Pasang resep teks dulu, matikan loading
         setRecipes(suggestions); 
         setLoading(false);
         setLoadingStep("");
 
-        // BACKGROUND PROCESS: Generate gambar tanpa mengunci UI
+        // Background loading untuk gambar agar tidak nunggu lama
         suggestions.forEach(async (r, idx) => {
           try {
             const img = await generateRecipeImage(r.title);
             setRecipes(prev => prev.map((rec, i) => i === idx ? {...rec, imageUrl: img} : rec));
           } catch (e) {
-            console.warn("Gambar gagal:", r.title);
+            console.warn("Image generation failed for:", r.title);
           }
         });
 
@@ -57,13 +70,14 @@ const App: React.FC = () => {
       } else {
         setLoading(false);
         setLoadingStep("");
-        alert("Bahan tidak jelas. Coba foto lagi dengan pencahayaan lebih baik.");
+        alert("Bahan tidak terdeteksi. Silakan coba ambil foto yang lebih jelas.");
       }
 
     } catch (err) {
       console.error("Critical Error:", err);
       setLoading(false);
       setLoadingStep("");
+      alert("Terjadi kesalahan pada sistem AI.");
     }
   };
 
@@ -71,7 +85,7 @@ const App: React.FC = () => {
     setDietary(d);
     if (ingredients.length > 0) {
       setLoading(true);
-      setLoadingStep(`Menu ${d}...`);
+      setLoadingStep(`Menyesuaikan menu ${d}...`);
       try {
         const suggestions = await generateRecipes(ingredients, d);
         setRecipes(suggestions);
@@ -89,7 +103,7 @@ const App: React.FC = () => {
 
   const handleGeneratePlan = async () => {
     setLoading(true);
-    setLoadingStep("Menyusun jadwal...");
+    setLoadingStep("Menyusun jadwal makan...");
     try {
       const plan = await generateMealPlan(inventory);
       setMealPlan(plan);
@@ -158,11 +172,12 @@ const App: React.FC = () => {
                   My Kitchen Assistant
                 </h1>
                 <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">
-                  Snap ingredients. AI cook instantly.
+                  Foto bahan makananmu, AI akan beraksi seketika.
                 </p>
               </header>
               <FridgeScanner 
                 onCapture={handleCapture} 
+                onProcessing={handleProcessing}
                 loading={loading} 
                 loadingStep={loadingStep} 
                 detectedIngredients={ingredients} 

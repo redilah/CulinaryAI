@@ -4,38 +4,97 @@ import { DietaryRestriction } from './types';
 
 interface FridgeScannerProps {
   onCapture: (base64: string) => void;
+  onProcessing: (step: string) => void; // Prop baru untuk feedback instan
   detectedIngredients: string[];
   loading: boolean;
   loadingStep?: string;
   dietary: DietaryRestriction;
 }
 
-const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngredients, loading, loadingStep, dietary }) => {
+const FridgeScanner: React.FC<FridgeScannerProps> = ({ 
+  onCapture, 
+  onProcessing, 
+  detectedIngredients, 
+  loading, 
+  loadingStep, 
+  dietary 
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Clean prefix for mobile browsers
-        const base64 = result.includes(',') ? result.split(',')[1] : result;
-        onCapture(base64);
+
+    // LANGKAH 1: Berikan feedback instan ke UI
+    onProcessing("Membaca file...");
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => {
+        alert("Gagal memuat gambar. Silakan coba foto lain.");
+        onProcessing("");
       };
-      reader.onerror = (err) => {
-        console.error("FileReader Error:", err);
-        alert("Gagal membaca file.");
-      };
-      reader.readAsDataURL(file);
       
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (err) {
-      console.error("Scanner Error:", err);
-      alert("Terjadi kesalahan teknis.");
-    }
+      img.onload = () => {
+        try {
+          onProcessing("Mengompres foto...");
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Batasi resolusi maksimal untuk stabilitas mobile (1024px)
+          const MAX_SIZE = 1024;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            alert("Gagal mengolah gambar di browser ini.");
+            onProcessing("");
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Gunakan JPEG/WebP dengan kualitas sedang (0.6) agar file sangat kecil tapi AI tetap jelas
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+          
+          // Kirim ke App.tsx untuk diproses AI
+          onCapture(compressedBase64);
+          
+          // Bersihkan memory
+          canvas.width = 0;
+          canvas.height = 0;
+        } catch (err) {
+          console.error("Compression error:", err);
+          alert("Gagal memproses gambar.");
+          onProcessing("");
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    
+    reader.onerror = () => {
+      alert("Gagal membaca file dari penyimpanan.");
+      onProcessing("");
+    };
+    
+    reader.readAsDataURL(file);
+    
+    // Reset input agar bisa pilih file yang sama lagi jika perlu
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -60,8 +119,8 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl mb-4">
                 <i className="fa-solid fa-camera-retro text-3xl text-emerald-500"></i>
               </div>
-              <p className="text-slate-900 font-black uppercase text-xs tracking-widest">Pindai Bahan Dapur</p>
-              <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-widest">Ketuk untuk upload foto</p>
+              <p className="text-slate-900 font-black uppercase text-xs tracking-widest">Ambil Foto Bahan</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-widest">Sentuh untuk buka kamera/galeri</p>
             </div>
           )}
           <input 
@@ -75,7 +134,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
 
         <div className="flex-1 bg-slate-50/60 rounded-[2rem] p-6 md:p-10 border border-slate-100 flex flex-col min-h-[220px]">
           <header className="flex items-center justify-between mb-6">
-            <h2 className="text-lg md:text-2xl font-black text-slate-900 tracking-tighter">Detected Ingredients</h2>
+            <h2 className="text-lg md:text-2xl font-black text-slate-900 tracking-tighter">Bahan Terdeteksi</h2>
             {dietary !== DietaryRestriction.None && (
               <span className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">
                 {dietary}
@@ -96,7 +155,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
             ) : (
               <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center opacity-40 text-center">
                  <i className="fa-solid fa-wand-magic-sparkles text-3xl mb-3 text-slate-300"></i>
-                 <p className="text-slate-500 italic text-xs font-bold">Siap menganalisa...</p>
+                 <p className="text-slate-500 italic text-xs font-bold">Menunggu foto...</p>
               </div>
             )}
           </div>

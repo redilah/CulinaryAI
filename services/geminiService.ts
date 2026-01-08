@@ -25,22 +25,22 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
 export const analyzeFridgeImage = async (base64WithHeader: string): Promise<string[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    // 1. OTOMATIS DETEKSI MIME TYPE (Penting untuk WebP di Mobile)
+    // Deteksi MIME Type Otomatis (WebP/JPEG/PNG)
     let mimeType = "image/jpeg";
     if (base64WithHeader.includes("data:")) {
       const match = base64WithHeader.match(/data:(.*?);base64/);
       if (match) mimeType = match[1];
     }
     
-    // 2. SANITASI BASE64 MURNI
+    // Pastikan hanya data base64 murni yang dikirim
     const sanitizedBase64 = base64WithHeader.includes(',') ? base64WithHeader.split(',')[1] : base64WithHeader;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: 'gemini-3-flash-preview',
       contents: { 
         parts: [
           { inlineData: { data: sanitizedBase64, mimeType } },
-          { text: "Sebutkan bahan makanan yang ada di foto ini. Jika foto kurang jelas, tebak bahan yang paling mungkin terlihat (seperti botol, sayuran, atau bumbu). Jawab dengan nama bahan saja dipisahkan koma dalam Bahasa Indonesia." }
+          { text: "Identifikasi bahan makanan di foto ini. Sebutkan nama bahannya saja dipisahkan koma dalam Bahasa Indonesia. Jika foto kurang jelas, tebak bahan yang paling mungkin." }
         ] 
       }
     });
@@ -49,27 +49,22 @@ export const analyzeFridgeImage = async (base64WithHeader: string): Promise<stri
     const detected = responseText
       .split(/[,\n]/)
       .map(s => s.replace(/^\d+[\s.)]+/, '').trim().toLowerCase())
-      .filter(s => s.length > 1 && !s.includes("maaf") && s.split(' ').length <= 3);
+      .filter(s => s.length > 1 && !s.includes("maaf") && !s.includes("berikut adalah"));
       
-    return detected.length > 0 ? detected : ["telur", "bawang merah", "bawang putih", "cabai"];
+    return detected.length > 0 ? detected : ["telur", "bawang merah", "bawang putih", "minyak goreng"];
   } catch (e) { 
-    console.error("AI Scan Error:", e);
+    console.error("AI Analysis Error:", e);
     return ["telur", "bawang merah", "bawang putih"]; 
   }
 };
 
 export const generateRecipes = async (ingredients: string[], restriction: DietaryRestriction): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const systemPrompt = `Kamu adalah Koki Cerdas. Buat 5 resep ${restriction} dari: ${ingredients.join(', ')}. 
-  Berikan respon JSON murni tanpa markdown.
-  - title: Nama masakan.
-  - description: Penjelasan singkat.
-  - instructions_id: Langkah detail dengan takaran.`;
+  const systemPrompt = `Buat 4 resep ${restriction} dari: ${ingredients.join(', ')}. Format JSON. Respon harus Bahasa Indonesia.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: 'gemini-3-flash-preview',
       contents: systemPrompt,
       config: { 
         responseMimeType: "application/json",
@@ -85,8 +80,7 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
               calories: { type: Type.INTEGER },
               ingredients_id: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, quantity: { type: Type.STRING } } } },
               instructions_id: { type: Type.ARRAY, items: { type: Type.STRING } }
-            },
-            required: ["title", "description", "difficulty", "prep_time", "calories", "ingredients_id", "instructions_id"]
+            }
           }
         }
       }
@@ -104,7 +98,7 @@ export const generateRecipes = async (ingredients: string[], restriction: Dietar
       instructionsID: r.instructions_id,
       ingredientsEN: r.ingredients_id,
       instructionsEN: r.instructions_id,
-      imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800" // Fallback instan
+      imageUrl: "" 
     }));
   } catch (e) { return []; }
 };
@@ -114,7 +108,7 @@ export const generateRecipeImage = async (title: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: `Food photography of ${title}, professional lighting.` }] }
+      contents: { parts: [{ text: `Professional food photography of ${title}, restaurant style, 4k.` }] }
     });
     const parts = response.candidates?.[0]?.content?.parts || [];
     for (const part of parts) if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
@@ -148,8 +142,8 @@ export const estimateInventory = async (ingredients: string[]): Promise<Inventor
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: `Bahan: ${ingredients.join(', ')}. Estimasikan masa simpan dalam JSON (name, category, days_remaining).`,
+      model: 'gemini-3-flash-preview',
+      contents: `Bahan: ${ingredients.join(', ')}. Estimasikan masa simpan. JSON.`,
       config: { responseMimeType: "application/json" }
     });
     const result = JSON.parse(response.text || "[]");
@@ -168,7 +162,7 @@ export const generateMealPlan = async (inventory: InventoryItem[]): Promise<Meal
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: 'gemini-3-flash-preview',
       contents: `Jadwal makan 3 hari dari: ${inventory.map(i => i.name).join(', ')}. JSON format.`,
       config: { responseMimeType: "application/json" }
     });
