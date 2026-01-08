@@ -21,7 +21,7 @@ const FridgeScanner: React.FC<FridgeScannerProps> = ({ onCapture, detectedIngred
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        // Clean prefix for mobile browsers
+        // Clean prefix for mobile browsers (data:image/jpeg;base64,...)
         const base64 = result.includes(',') ? result.split(',')[1] : result;
         onCapture(base64);
       };

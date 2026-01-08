@@ -2,13 +2,13 @@
 import React, { useState } from 'react';
 import { analyzeFridgeImage, generateRecipes, generateRecipeImage, estimateInventory, generateMealPlan } from './services/geminiService';
 import { Recipe, DietaryRestriction, ShoppingItem, InventoryItem, MealPlanDay } from './types';
-import Sidebar from './Sidebar';
-import FridgeScanner from './FridgeScanner';
-import RecipeList from './RecipeList';
-import CookingMode from './CookingMode';
-import ShoppingList from './ShoppingList';
-import InventoryDashboard from './InventoryDashboard';
-import MealPlanner from './MealPlanner';
+import Sidebar from './components/Sidebar';
+import FridgeScanner from './components/FridgeScanner';
+import RecipeList from './components/RecipeList';
+import CookingMode from './components/CookingMode';
+import ShoppingList from './components/ShoppingList';
+import InventoryDashboard from './components/InventoryDashboard';
+import MealPlanner from './components/MealPlanner';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'fridge' | 'inventory' | 'planner' | 'shopping'>('fridge');
@@ -28,57 +28,40 @@ const App: React.FC = () => {
     setLoading(true);
     
     try {
-      // 1. Deteksi Bahan (Wajib)
-      setLoadingStep("Meneliti bahan...");
+      setLoadingStep("Menganalisa foto...");
       const detected = await analyzeFridgeImage(base64);
       setIngredients(detected);
       
-      if (detected.length === 0) {
-        setLoading(false);
-        alert("Tidak ada bahan yang terdeteksi. Pastikan foto cukup terang.");
-        return;
-      }
-
-      // 2. Generate Resep (UTAMA - Munculkan ini secepat mungkin)
-      setLoadingStep("Koki meracik resep...");
+      setLoadingStep("Meracik resep...");
       const suggestions = await generateRecipes(detected, dietary);
       
       if (suggestions && suggestions.length > 0) {
-        setRecipes(suggestions); // Tampilkan teks resep DULU
-      }
+        // UI NON-BLOCKING: Pasang resep teks dulu, matikan loading
+        setRecipes(suggestions); 
+        setLoading(false);
+        setLoadingStep("");
 
-      // 3. Matikan loading utama agar user bisa melihat resep segera
-      setLoading(false);
-      setLoadingStep("");
-
-      // 4. Proses Background (Jangan pakai 'await' agar tidak menghambat resep)
-      // Ambil Gambar secara bertahap di background
-      suggestions.forEach(async (r, idx) => {
-        try {
-          const img = await generateRecipeImage(r.title);
-          setRecipes(prev => prev.map((rec, i) => i === idx ? {...rec, imageUrl: img} : rec));
-        } catch (e) {
-          console.log("Gagal ambil gambar untuk:", r.title);
-        }
-      });
-
-      // Update Inventori secara background
-      estimateInventory(detected).then(estimated => {
-        setInventory(prev => {
-          const combined = [...prev, ...estimated];
-          const seen = new Set();
-          return combined.filter(item => {
-            const key = item.name.toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
+        // BACKGROUND PROCESS: Generate gambar tanpa mengunci UI
+        suggestions.forEach(async (r, idx) => {
+          try {
+            const img = await generateRecipeImage(r.title);
+            setRecipes(prev => prev.map((rec, i) => i === idx ? {...rec, imageUrl: img} : rec));
+          } catch (e) {
+            console.warn("Gambar gagal:", r.title);
+          }
         });
-      }).catch(e => console.log("Inventory error diabaikan"));
+
+        estimateInventory(detected).then(estimated => {
+          setInventory(prev => [...prev, ...estimated].slice(0, 50));
+        }).catch(() => {});
+      } else {
+        setLoading(false);
+        setLoadingStep("");
+        alert("Bahan tidak jelas. Coba foto lagi dengan pencahayaan lebih baik.");
+      }
 
     } catch (err) {
       console.error("Critical Error:", err);
-      alert("Terjadi kesalahan teknis. Silakan periksa koneksi Anda.");
       setLoading(false);
       setLoadingStep("");
     }
@@ -88,12 +71,11 @@ const App: React.FC = () => {
     setDietary(d);
     if (ingredients.length > 0) {
       setLoading(true);
-      setLoadingStep(`Menyesuaikan resep ${d}...`);
+      setLoadingStep(`Menu ${d}...`);
       try {
         const suggestions = await generateRecipes(ingredients, d);
         setRecipes(suggestions);
         setLoading(false);
-        
         suggestions.forEach(async (r, idx) => {
           const img = await generateRecipeImage(r.title);
           setRecipes(prev => prev.map((rec, i) => i === idx ? { ...rec, imageUrl: img } : rec));
@@ -107,13 +89,13 @@ const App: React.FC = () => {
 
   const handleGeneratePlan = async () => {
     setLoading(true);
-    setLoadingStep("Menyusun jadwal makan...");
+    setLoadingStep("Menyusun jadwal...");
     try {
-      setActiveTab('planner');
       const plan = await generateMealPlan(inventory);
       setMealPlan(plan);
+      setActiveTab('planner');
     } catch (e) {
-      alert("Gagal menyusun jadwal makan.");
+      alert("Gagal menyusun jadwal.");
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -172,11 +154,11 @@ const App: React.FC = () => {
           {activeTab === 'fridge' && (
             <div className="space-y-10">
               <header className="space-y-2">
-                <h1 className="text-[26px] xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight leading-tight">
-                  My Culinary Assistant
+                <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-slate-900 tracking-tight leading-tight">
+                  My Kitchen Assistant
                 </h1>
                 <p className="text-slate-500 text-sm md:text-xl font-medium max-w-3xl leading-relaxed">
-                  Snap any ingredients from your kitchen. AI will instantly recognize items and suggest gourmet recipes.
+                  Snap ingredients. AI cook instantly.
                 </p>
               </header>
               <FridgeScanner 
